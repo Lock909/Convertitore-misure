@@ -27,3 +27,21 @@ def calcola_sezione_protezione(i_max, densita):
             int_scelto = val_i
             break
     return int_scelto, sez_scelta, sezione_teorica
+
+def calcola_rho_termica(materiale, isolante, posa):
+    # Determina la resistività base a 20°C
+    rho_base = 0.0175 if materiale == "Rame" else 0.0282
+    # Determina la temperatura massima dell'isolamento
+    temp_regime = 70.0 if "PVC" in isolante else 90.0
+    
+    # Assegna la temperatura reale di lavoro in base allo scambio termico della posa
+    if "molto gravosa" in posa.lower():
+        temp_lavoro = temp_regime
+    elif "ventilazione" in posa.lower():
+        temp_lavoro = temp_regime - 15.0
+    else:
+        temp_lavoro = temp_regime - 5.0
+        
+    # Formula CEI di variazione termica: rho_t = rho_20 * (1 + 0.004 * (T - 20))
+    rho_t = rho_base * (1.0 + 0.004 * (temp_lavoro - 20.0))
+    return rho_t, temp_lavoro
