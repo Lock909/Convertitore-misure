@@ -5,8 +5,6 @@ import formule
 st.set_page_config(page_title="Tool Industriale", page_icon="⚙️", layout="centered")
 
 P_ATM_PA = 101325.0
-RHO_RAME = 0.0175
-RHO_ALLUMINIO = 0.0282
 
 categories = {
     "Pressione": {"pa": 1.0, "kpa": 1000.0, "mpa": 1000000.0, "bar": 100000.0, "bara": 100000.0, "barg": 100000.0, "psi": 6894.757, "psia": 6894.757, "psig": 6894.757, "atm": 101325.0, "mmhg": 133.322, "torr": 133.322},
@@ -67,21 +65,36 @@ else:
             st.success(f"**Potenza Attiva:** {kw:.4f} kW")
             
     elif tipo == "Caduta di Tensione":
-        mat = st.radio("Materiale:", ["Rame", "Alluminio"])
-        fasi = st.selectbox("Linea:", ["Monofase", "Trifase"])
-        amp = st.number_input("Ampere carico:", value=16.0)
-        metri = st.number_input("Metri linea:", value=50.0)
-        sez = st.selectbox("Sezione mm²:", formule.ottieni_sezioni())
-        isol = st.selectbox("Isolante:", ["PVC (70°C)", "Gomma (90°C)"])
+        mat = st.radio("Materiale Conduttore:", ["Rame", "Alluminio"])
+        fasi = st.selectbox("Linea elettrica:", ["Monofase", "Trifase"])
+        amp = st.number_input("Corrente di impiego (Ib) [A]:", value=16.0)
+        metri = st.number_input("Lunghezza linea [Metri]:", value=50.0)
+        sez = st.selectbox("Sezione Cavo mm²:", formule.ottieni_sezioni())
         
-        if st.button("Calcola Perdita"):
-            temp = 70.0 if "PVC" in isol else 90.0
-            rho = RHO_RAME if mat == "Rame" else RHO_ALLUMINIO
-            rho_t = rho * (1.0 + 0.004 * (temp - 20.0))
+        # --- MENU DI SELEZIONE POSA INTERATTIVI ---
+        isol = st.selectbox("Isolante Cavo:", [
+            "PVC (Temperatura max: 70°C)", 
+            "EPR / XLPE / Gomma (Temperatura max: 90°C)"
+        ])
+        posa_ambiente = st.selectbox("Modalità di Posa Conduttura:", [
+            "In tubo protettivo entro parete isolante / muratura (Posa molto gravosa)",
+            "In tubo o canale fissato a parete / pavimento (Standard)",
+            "In aria aperta su passerelle perforate (Ventilazione ottimale)",
+            "Interrato in tubo o canale nel suolo"
+        ])
+        
+        if st.button("Calcola Perdita di Linea"):
+            rho_t, t_es = formule.calcola_rho_termica(mat, isol, posa_ambiente)
             k = 2.0 if fasi == "Monofase" else math.sqrt(3)
             dv = (k * rho_t * metri * amp * 0.85) / sez
             v_rif = 230.0 if fasi == "Monofase" else 400.0
-            st.success(f"**Caduta di Tensione:** {dv:.2f} V ({ (dv/v_rif)*100.0 :.2f}%)")
+            pct = (dv / v_rif) * 100.0
+            
+            st.info(f"🌡️ Temperatura stimata conduttore: {t_es:.0f}°C | \u03c1_t = {rho_t:.5f}")
+            if pct > 4.0:
+                st.error(f"**Caduta di Tensione:** {dv:.2f} V ({pct:.2f}%) ⚠️ Fuori norma > 4%")
+            else:
+                st.success(f"**Caduta di Tensione:** {dv:.2f} V ({pct:.2f}%) ✅ A norma")
             
     elif tipo == "Dimensionamento Protezioni":
         ib = st.number_input("Corrente di Impiego Carico (Ib) [A]:", value=16.0)
