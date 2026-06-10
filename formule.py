@@ -28,13 +28,12 @@ def calcola_sezione_protezione(i_max, densita):
             break
     return int_scelto, sez_scelta, sezione_teorica
 
-def calcola_rho_termica(materiale, isolante, posa):
-    # Determina la resistività base a 20°C
+def calcola_caduta_avanzata(materiale, isolante, posa, fasi, amp, metri, sez, cos_phi):
+    # 1. Resistività base a 20°C
     rho_base = 0.0175 if materiale == "Rame" else 0.0282
-    # Determina la temperatura massima dell'isolamento
     temp_regime = 70.0 if "PVC" in isolante else 90.0
     
-    # Assegna la temperatura reale di lavoro in base allo scambio termico della posa
+    # 2. Correzione temperatura lavoro in base alla posa
     if "molto gravosa" in posa.lower():
         temp_lavoro = temp_regime
     elif "ventilazione" in posa.lower():
@@ -42,6 +41,21 @@ def calcola_rho_termica(materiale, isolante, posa):
     else:
         temp_lavoro = temp_regime - 5.0
         
-    # Formula CEI di variazione termica: rho_t = rho_20 * (1 + 0.004 * (T - 20))
+    # 3. Resistenza R corretta termicamente per chilometro
     rho_t = rho_base * (1.0 + 0.004 * (temp_lavoro - 20.0))
-    return rho_t, temp_lavoro
+    r_km = (rho_t / sez) * 1000.0
+    
+    # 4. Reattanza induttiva convenzionale standard per km (Norma CEI)
+    x_km = 0.08
+    
+    # 5. Calcolo componenti trigonometriche dello sfasamento
+    sin_phi = math.sqrt(1.0 - cos_phi**2)
+    
+    # 6. Impedenza totale equivalente combinata del cavo
+    z_fattore = (r_km * cos_phi) + (x_km * sin_phi)
+    
+    # 7. Calcolo dV in Volt (metri convertiti in km dividendo per 1000)
+    k = 2.0 if fasi == "Monofase" else math.sqrt(3)
+    dv = (k * amp * (metri / 1000.0) * z_fattore)
+    
+    return dv, temp_lavoro, rho_t
