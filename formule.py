@@ -29,33 +29,54 @@ def calcola_sezione_protezione(i_max, densita):
     return int_scelto, sez_scelta, sezione_teorica
 
 def calcola_caduta_avanzata(materiale, isolante, posa, fasi, amp, metri, sez, cos_phi):
-    # 1. Resistività base a 20°C
     rho_base = 0.0175 if materiale == "Rame" else 0.0282
     temp_regime = 70.0 if "PVC" in isolante else 90.0
-    
-    # 2. Correzione temperatura lavoro in base alla posa
     if "molto gravosa" in posa.lower():
         temp_lavoro = temp_regime
     elif "ventilazione" in posa.lower():
         temp_lavoro = temp_regime - 15.0
     else:
         temp_lavoro = temp_regime - 5.0
-        
-    # 3. Resistenza R corretta termicamente per chilometro
     rho_t = rho_base * (1.0 + 0.004 * (temp_lavoro - 20.0))
     r_km = (rho_t / sez) * 1000.0
-    
-    # 4. Reattanza induttiva convenzionale standard per km (Norma CEI)
     x_km = 0.08
-    
-    # 5. Calcolo componenti trigonometriche dello sfasamento
     sin_phi = math.sqrt(1.0 - cos_phi**2)
-    
-    # 6. Impedenza totale equivalente combinata del cavo
     z_fattore = (r_km * cos_phi) + (x_km * sin_phi)
-    
-    # 7. Calcolo dV in Volt (metri convertiti in km dividendo per 1000)
     k = 2.0 if fasi == "Monofase" else math.sqrt(3)
     dv = (k * amp * (metri / 1000.0) * z_fattore)
-    
     return dv, temp_lavoro, rho_t
+
+def info_tipo_dato(tipo):
+    db_plc = {
+        "BYTE": ("8 Bit (1 Byte)", "Nessuno (Sequenza di bit)", "0", "255 (Esadecimale: 16#FF)"),
+        "WORD": ("16 Bit (2 Byte) - Occupa 1 reg. %R", "Nessuno (Sequenza di bit)", "0", "65535 (Esadecimale: 16#FFFF)"),
+        "DWORD": ("32 Bit (4 Byte) - Occupa 2 reg. %R", "Nessuno (Sequenza di bit)", "0", "4294967295 (Esadecimale: 16#FFFFFFFF)"),
+        "INT (Integer)": ("16 Bit (2 Byte) - Occupa 1 reg. %R", "Intero con segno", "-32'768", "+32'767"),
+        "UINT (Unsigned INT)": ("16 Bit (2 Byte) - Occupa 1 reg. %R", "Intero senza segno", "0", "+65'535"),
+        "DINT (Double INT)": ("32 Bit (4 Byte) - Occupa 2 reg. %R", "Intero doppio con segno", "-2'147'483'648", "+2'147'483'647"),
+        "UDINT (Unsigned DINT)": ("32 Bit (4 Byte) - Occupa 2 reg. %R", "Intero doppio senza segno", "0", "+4'294'967'295"),
+        "REAL (Float)": ("32 Bit (4 Byte) - Occupa 2 reg. %R", "Virgola mobile (Precisione singola)", "-3.402823e+38", "+3.402823e+38")
+    }
+    return db_plc.get(tipo, ("-", "-", "-", "-"))
+
+def esegui_scalatura(val_grezzo, in_min, in_max, out_min, out_max):
+    if in_max == in_min:
+        return 0.0, "Errore: I limiti di ingresso PLC non possono essere uguali!"
+    val_scalato = out_min + (val_grezzo - in_min) * (out_max - out_min) / (in_max - in_min)
+    return val_scalato, "OK"
+
+# --- NUOVE FUNZIONI AVANZATE PER PLC & RX3I ---
+def calcola_esplosione_bits(valore_int):
+    # Converte un intero in una lista di 16 bit (0 o 1) dal bit 0 al bit 15
+    valore_int = int(valore_int) & 0xFFFF  # Forza il limite a 16 bit
+    lista_bits = list()
+    for b in range(16):
+        lista_bits.append((valore_int >> b) & 1)
+    return lista_bits
+
+def calcola_limiti_memoria_rx3i(prefisso, start_idx, quantita, tipo_var):
+    # Calcola l'ultimo indirizzo occupato per evitare sovrascritture nei registri
+    moltiplicatori = {"1 Bit (Digital I/O)": 1, "16 Bit (WORD / INT)": 1, "32 Bit (REAL / DINT)": 2}
+    offset = moltiplicatori.get(tipo_var, 1) * quantita
+    end_idx = start_idx + offset - 1
+    return f"{prefisso}{start_idx:04d} ➔ {prefisso}{end_idx:04d}"
