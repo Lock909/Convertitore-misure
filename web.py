@@ -62,14 +62,19 @@ elif modalita == "Calcoli Elettrici ⚡":
         metri = st.number_input("Lunghezza [Metri]:", value=50.0)
         sez = st.selectbox("Sezione mm²:", formule.ottieni_sezioni())
         isol = st.selectbox("Isolante:", ["PVC (70°C)", "Gomma (90°C)"])
-        cos_phi = st.number_input("cos φ:", value=0.85)
+        cos_phi = st.number_input("cos φ:", value=0.85, min_value=0.1, max_value=1.0)
         posa = st.selectbox("Metodo di Posa (CEI 64-8):", ["Metodo A1/A2 (Tubo in parete isolante)", "Metodo B1/B2 (Tubo a parete)", "Metodo C (A vista a parete)", "Metodo E/F/G (Passerelle / Aria aperta)", "Posa Interrata"])
         
         if st.button("Calcola Perdita"):
             dv, t_es, rho_t = formule.calcola_caduta_avanzata(mat, isol, posa, fasi, amp, metri, sez, cos_phi)
-            pct = (dv / (230.0 if fasi == "Monofase" else 400.0)) * 100.0
+            v_rif = 230.0 if fasi == "Monofase" else 400.0
+            pct = (dv / v_rif) * 100.0
+            
             st.info(f"🌡️ Temp: {t_es:.0f}°C | \u03c1_t = {rho_t:.5f}")
-            st.error(f"**Perdita:** {dv:.2f} V ({pct:.2f}%) ⚠️ >4%") if pct > 4.0 else st.success(f"**Perdita:** {dv:.2f} V ({pct:.2f}%) ✅ OK")
+            if pct > 4.0:
+                st.error(f"**Perdita:** {dv:.2f} V ({pct:.2f}%) ⚠️ Fuori norma > 4%")
+            else:
+                st.success(f"**Perdita:** {dv:.2f} V ({pct:.2f}%) ✅ OK")
             
     elif tipo == "Dimensionamento Protezioni":
         ib = st.number_input("Corrente Ib [A]:", value=16.0)
