@@ -5,6 +5,8 @@ import formule
 st.set_page_config(page_title="Tool Industriale", page_icon="⚙️", layout="centered")
 
 P_ATM_PA = 101325.0
+RHO_RAME = 0.0175
+RHO_ALLUMINIO = 0.0282
 
 categories = {
     "Pressione": {"pa": 1.0, "kpa": 1000.0, "mpa": 1000000.0, "bar": 100000.0, "bara": 100000.0, "barg": 100000.0, "psi": 6894.757, "psia": 6894.757, "psig": 6894.757, "atm": 101325.0, "mmhg": 133.322, "torr": 133.322},
@@ -70,27 +72,27 @@ else:
         amp = st.number_input("Corrente di impiego (Ib) [A]:", value=16.0)
         metri = st.number_input("Lunghezza linea [Metri]:", value=50.0)
         sez = st.selectbox("Sezione Cavo mm²:", formule.ottieni_sezioni())
+        isol = st.selectbox("Isolante Cavo:", ["PVC (70°C)", "EPR / XLPE / Gomma (90°C)"])
+        cos_phi = st.number_input("Fattore di potenza del carico (cos φ):", min_value=0.1, max_value=1.0, value=0.85, format="%.2f")
         
-        # --- MENU DI SELEZIONE POSA INTERATTIVI ---
-        isol = st.selectbox("Isolante Cavo:", [
-            "PVC (Temperatura max: 70°C)", 
-            "EPR / XLPE / Gomma (Temperatura max: 90°C)"
-        ])
-        posa_ambiente = st.selectbox("Modalità di Posa Conduttura:", [
-            "In tubo protettivo entro parete isolante / muratura (Posa molto gravosa)",
-            "In tubo o canale fissato a parete / pavimento (Standard)",
-            "In aria aperta su passerelle perforate (Ventilazione ottimale)",
-            "Interrato in tubo o canale nel suolo"
+        posa_ambiente = st.selectbox("Metodo di Posa (Tabella 52C CEI 64-8):", [
+            "Metodo A1: Cavi unipolari in tubo protettivo entro parete isolante",
+            "Metodo A2: Cavo multipolare in tubo protettivo entro parete isolante",
+            "Metodo B1: Cavi unipolari in tubo protettivo su parete o in canale",
+            "Metodo B2: Cavo multipolare in tubo protettivo su parete o in canale",
+            "Metodo C: Cavi unipolari o multipolari fissati a vista su parete",
+            "Metodo E: Cavo multipolare in aria libera su passerella perforata",
+            "Metodo F: Cavi unipolari accostati in aria libera su passerella perforata",
+            "Metodo G: Cavi unipolari distanziati in aria libera (ventilazione max)",
+            "Posa Interrata: Cavi posati in tubo o canale interrato nel suolo"
         ])
         
-        if st.button("Calcola Perdita di Linea"):
-            rho_t, t_es = formule.calcola_rho_termica(mat, isol, posa_ambiente)
-            k = 2.0 if fasi == "Monofase" else math.sqrt(3)
-            dv = (k * rho_t * metri * amp * 0.85) / sez
+        if st.button("Calcola Perdita Vettoriale"):
+            dv, t_es, rho_t = formule.calcola_caduta_avanzata(mat, isol, posa_ambiente, fasi, amp, metri, sez, cos_phi)
             v_rif = 230.0 if fasi == "Monofase" else 400.0
             pct = (dv / v_rif) * 100.0
             
-            st.info(f"🌡️ Temperatura stimata conduttore: {t_es:.0f}°C | \u03c1_t = {rho_t:.5f}")
+            st.info(f"🌡️ Temp. conduttore: {t_es:.0f}°C | \u03c1_t = {rho_t:.5f} \u03a9·mm\u00b2/m")
             if pct > 4.0:
                 st.error(f"**Caduta di Tensione:** {dv:.2f} V ({pct:.2f}%) ⚠️ Fuori norma > 4%")
             else:
@@ -103,3 +105,13 @@ else:
             mag, cavo, t_sez = formule.calcola_sezione_protezione(ib, j_dens)
             st.success(f"🔒 **Interruttore Magnetotermico consigliato (In):** {mag} A")
             st.info(f"📐 **Sezione Cavo commerciale:** {cavo} mm² (Calcolata: {t_sez:.2f} mm²)")
+
+# --- SEZIONE BLINDATURA LEGALE (DISCLAIMER) ---
+st.markdown("---")
+st.caption(
+    "⚠️ **Disclaimer Legale:** Questo strumento fornisce verifiche e calcoli a titolo puramente indicativo, "
+    "sviluppati sulla base delle formule generali della norma CEI 64-8. I risultati ottenuti non sostituiscono "
+    "in alcun modo la progettazione esecutiva e formale che deve essere eseguita e firmata da un professionista "
+    "abilitato. L'autore declina ogni responsabilità per l'uso improprio o per decisioni tecniche prese sulla "
+    "base dei dati generati da questa applicazione."
+)
