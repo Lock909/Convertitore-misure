@@ -62,19 +62,30 @@ elif modalita == "Calcoli Elettrici ⚡":
         metri = st.number_input("Lunghezza [Metri]:", value=50.0)
         sez = st.selectbox("Sezione mm²:", formule.ottieni_sezioni())
         isol = st.selectbox("Isolante:", ["PVC (70°C)", "Gomma (90°C)"])
-        cos_phi = st.number_input("cos φ:", value=0.85, min_value=0.1, max_value=1.0)
-        posa = st.selectbox("Metodo di Posa (CEI 64-8):", ["Metodo A1/A2 (Tubo in parete isolante)", "Metodo B1/B2 (Tubo a parete)", "Metodo C (A vista a parete)", "Metodo E/F/G (Passerelle / Aria aperta)", "Posa Interrata"])
+        cos_phi = st.number_input("cos φ del carico:", value=0.85, min_value=0.1, max_value=1.0)
         
-        if st.button("Calcola Perdita"):
-            dv, t_es, rho_t = formule.calcola_caduta_avanzata(mat, isol, posa, fasi, amp, metri, sez, cos_phi)
+        # --- INPUT VARIABILI TERMICO-AMBIENTALI ED AFFIANCAMENTO (K1 e K2) ---
+        st.subheader("🌡️ Coefficienti di Declassamento Termico (CEI 64-8)")
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            temp_ambiente = st.slider("Temperatura Ambiente (°C):", min_value=10, max_value=60, value=30, step=5)
+        with col_t2:
+            n_circuiti = st.number_input("Numero di Circuiti/Cavi affiancati nello stesso condotto:", min_value=1, max_value=20, value=1, step=1)
+            
+        iz_tabella = st.number_input("Portata Nominale del singolo cavo da catalogo (Iz base a 30°C) [A]:", value=20.0)
+        posa = st.selectbox("Metodo di Posa (CEI 64-8):", ["Metodo A1/A2 (Tubo in parede isolante)", "Metodo B1/B2 (Tubo a parete)", "Metodo C (A vista a parete)", "Metodo E/F/G (Passerelle / Aria aperta)", "Posa Interrata"])
+        
+        if st.button("Calcola Perdita Vettoriale Completa"):
+            dv, t_es, rho_t, coeff_k1, coeff_k2, iz_real = formule.calcola_caduta_avanzata(mat, isol, posa, fasi, amp, metri, sez, cos_phi, temp_ambiente, iz_tabella, n_circuiti)
             v_rif = 230.0 if fasi == "Monofase" else 400.0
             pct = (dv / v_rif) * 100.0
             
-            st.info(f"🌡️ Temp: {t_es:.0f}°C | \u03c1_t = {rho_t:.5f}")
-            if pct > 4.0:
-                st.error(f"**Perdita:** {dv:.2f} V ({pct:.2f}%) ⚠️ Fuori norma > 4%")
-            else:
-                st.success(f"**Perdita:** {dv:.2f} V ({pct:.2f}%) ✅ OK")
+            st.info(f"📊 **Declassamento:** Ambiente (K1) = {coeff_k1:.2f} | Raggruppamento (K2) = {coeff_k2:.2f}")
+            st.info(f"🔌 **Vera Portata massima ammessa (Iz definitiva):** {iz_real:.2f} A")
+            st.info(f"🔥 **Vera Temperatura interna conduttore sotto carico:** {t_es:.1f} °C | \u03c1_t = {rho_t:.5f}")
+            
+            if pct > 4.0: st.error(f"**Perdita:** {dv:.2f} V ({pct:.2f}%) ⚠️ Fuori norma > 4%")
+            else: st.success(f"**Perdita:** {dv:.2f} V ({pct:.2f}%) ✅ A norma")
             
     elif tipo == "Dimensionamento Protezioni":
         ib = st.number_input("Corrente Ib [A]:", value=16.0)
