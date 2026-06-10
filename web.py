@@ -1,100 +1,93 @@
 import streamlit as st
-import math
-import formule
+import idraulica
+import elettrica
 import automazione
 
 st.set_page_config(page_title="Tool Industriale", page_icon="⚙️", layout="centered")
 
-categories = {
-    "Pressione": {"pa": 1.0, "kpa": 1000.0, "mpa": 1000000.0, "bar": 100000.0, "bara": 100000.0, "barg": 100000.0, "psi": 6894.757, "psia": 6894.757, "psig": 6894.757},
-    "Portata": {"m3/s": 1.0, "m3/h": 1.0/3600.0, "l/s": 0.001, "l/min": 0.001/60.0},
-    "Lunghezza": {"m": 1.0, "mm": 0.001, "cm": 0.01, "in": 0.0254, "ft": 0.3048},
-    "Temperatura": {"c": "Special", "f": "Special", "k": "Special"}
-}
-
 st.title("⚙️ Strumento Multifunzione Industriale")
 modalita = st.sidebar.radio("Seleziona Ambito:", ["Conversioni Standard", "Calcoli Elettrici ⚡", "Mondo PLC & Automazione 🤖"])
 
+# ==============================================================================
+# AMBITO 1: CONVERSIONI IDRAULICHE STANDARD
+# ==============================================================================
 if modalita == "Conversioni Standard":
     st.header("🔄 Convertitore di Unità")
+    categories = idraulica.ottieni_categorie()
     cat = st.selectbox("Grandezza:", list(categories.keys()))
     units = list(categories[cat].keys())
+    
     col1, col2 = st.columns(2)
     with col1: from_u = st.selectbox("Da:", units, index=0)
     with col2: to_u = st.selectbox("A:", units, index=1 if len(units)>1 else 0)
     val = st.number_input("Valore:", value=0.0, format="%.6f")
 
-    if cat == "Pressione":
-        p_pascal = val * categories[cat][from_u]
-        if from_u in ["barg", "psig"]: p_pascal += 101325.0
-        if to_u in ["barg", "psig"]: p_pascal -= 101325.0
-        res = p_pascal / categories[cat][to_u]
-    elif cat == "Temperatura":
-        k = val + 273.15 if from_u == "c" else ((val - 32) * 5/9 + 273.15 if from_u == "f" else val)
-        res = k - 273.15 if to_u == "c" else ((k - 273.15) * 9/5 + 32 if to_u == "f" else k)
-    else:
-        res = (val * categories[cat][from_u]) / categories[cat][to_u]
+    res = idraulica.esegui_conversione(cat, from_u, to_u, val)
     st.success(f"**Risultato:** {res:.6f} {to_u}")
 
+# ==============================================================================
+# AMBITO 2: CALCOLI ELETTRICI ⚡
+# ==============================================================================
 elif modalita == "Calcoli Elettrici ⚡":
     st.header("⚡ Calcolatore Elettrico")
-    tipo = st.selectbox("Tipo di Analisi:", ["Legge di Ohm", "Calcolo Potenza (kW)", "Caduta di Tensione", "Dimensionamento Protezioni"])
+    tipo = st.selectbox("Tipo di Analisi:", ["Legge di Ohm", "Analisi Potenze & Estrazione Ampere", "Caduta di Tensione", "Dimensionamento Protezioni"])
     
     if tipo == "Legge di Ohm":
         cerca = st.selectbox("Cosa calcolare?", ["Tensione", "Corrente", "Resistenza"])
         in1 = st.number_input("Primo Valore:", value=1.0)
         in2 = st.number_input("Secondo Valore:", value=1.0)
-        if st.button("Calcola"): st.success(formule.calcola_ohm(cerca, in1, in2))
+        if st.button("Calcola"): st.success(elettrica.calcola_ohm(cerca, in1, in2))
             
-    elif tipo == "Calcolo Potenza (kW)":
-        sis = st.selectbox("Sistema:", ["DC", "Monofase", "Trifase"])
-        v = st.number_input("Volt:", value=400.0 if sis=="Trifase" else 230.0)
-        i = st.number_input("Ampere:", value=10.0)
-        cos_phi = st.number_input("cos φ:", value=0.85) if sis != "DC" else 1.0
-        if st.button("Calcola kW"):
-            kw = (v * i * cos_phi * (math.sqrt(3) if sis == "Trifase" else 1.0)) / 1000.0
-            st.success(f"**Potenza Attiva:** {kw:.4f} kW")
+    elif tipo == "Analisi Potenze & Estrazione Ampere":
+        st.subheader("Calcolo Avanzato Potenze Elettriche e Corrente")
+        sis = st.selectbox("Sistema Elettrico:", ["DC", "Monofase", "Trifase"])
+        obiettivo = st.selectbox("Cosa desideri fare?", ["Estrai da Volt e Ampere", "Estrai Corrente (Ampere) da Watt"])
+        v = st.number_input("Tensione (Volt):", value=400.0 if sis=="Trifase" else (230.0 if sis=="Monofase" else 24.0))
+        cos_phi = st.number_input("Fattore di potenza (cos φ):", min_value=0.1, max_value=1.0, value=0.85) if sis != "DC" else 1.0
+        
+        if obiettivo == "Estrai da Volt e Ampere":
+            i = st.number_input("Corrente (Ampere):", value=10.0)
+            if st.button("Analizza Potenze"):
+                res = elettrica.calcola_potenza_e_corrente(sis, v, i, 0.0, cos_phi, obiettivo)
+                st.success(f"🔌 **Potenza Attiva:** {res['W']:.1f} W ({res['kW']:.4f} kW) | 🐎 **Meccanica:** {res['HP']:.2f} HP")
+                st.info(f"📊 **Apparente:** {res['VA']:.1f} VA | 📉 **Reattiva:** {res['VAR']:.1f} VAR")
+        else:
+            w = st.number_input("Potenza in WATT (W):", value=2200.0, step=100.0)
+            if st.button("Estrai Ampere"):
+                res = elettrica.calcola_potenza_e_corrente(sis, v, 0.0, w, cos_phi, obiettivo)
+                if res is None: st.error("Errore divisione per zero!")
+                else: st.success(f"⚡ **Corrente Assorbita:** {res['A']:.2f} A | 🐎 **Potenza:** {res['HP']:.2f} HP")
             
     elif tipo == "Caduta di Tensione":
         mat = st.radio("Materiale Conduttore:", ["Rame", "Alluminio"])
         fasi = st.selectbox("Linea elettrica:", ["Monofase", "Trifase"])
         amp = st.number_input("Corrente Ib [A]:", value=16.0)
         metri = st.number_input("Lunghezza [Metri]:", value=50.0)
-        sez = st.selectbox("Sezione mm²:", formule.ottieni_sezioni())
-        isol = st.selectbox("Isolante:", ["PVC (70°C)", "Gomma (90°C)"])
-        cos_phi = st.number_input("cos φ del carico:", value=0.85, min_value=0.1, max_value=1.0)
-        
-        # --- INPUT VARIABILI TERMICO-AMBIENTALI ED AFFIANCAMENTO (K1 e K2) ---
-        st.subheader("🌡️ Coefficienti di Declassamento Termico (CEI 64-8)")
-        col_t1, col_t2 = st.columns(2)
-        with col_t1:
-            temp_ambiente = st.slider("Temperatura Ambiente (°C):", min_value=10, max_value=60, value=30, step=5)
-        with col_t2:
-            n_circuiti = st.number_input("Numero di Circuiti/Cavi affiancati nello stesso condotto:", min_value=1, max_value=20, value=1, step=1)
-            
-        iz_tabella = st.number_input("Portata Nominale del singolo cavo da catalogo (Iz base a 30°C) [A]:", value=20.0)
-        posa = st.selectbox("Metodo di Posa (CEI 64-8):", ["Metodo A1/A2 (Tubo in parede isolante)", "Metodo B1/B2 (Tubo a parete)", "Metodo C (A vista a parete)", "Metodo E/F/G (Passerelle / Aria aperta)", "Posa Interrata"])
+        sez = st.selectbox("Sezione mm²:", (1.5, 2.5, 4.0, 6.0, 10.0, 16.0, 25.0, 35.0, 50.0, 70.0, 95.0, 120.0))
+        isol = st.selectbox("Isolante Cavo:", ["PVC (70°C)", "EPR / XLPE / Gomma (90°C)"])
+        cos_phi = st.number_input("cos φ:", value=0.85, min_value=0.1, max_value=1.0)
+        temp_ambiente = st.slider("Temperatura Ambiente (°C):", min_value=10, max_value=60, value=30, step=5)
+        n_circuiti = st.number_input("Numero di Cavi affiancati:", min_value=1, max_value=20, value=1)
+        iz_tabella = st.number_input("Portata Nominale catalogo (Iz base a 30°C) [A]:", value=20.0)
+        posa = st.selectbox("Metodo di Posa (CEI 64-8):", ["Metodo A1/A2", "Metodo B1/B2", "Metodo C", "Metodo E/F/G", "Posa Interrata"])
         
         if st.button("Calcola Perdita Vettoriale Completa"):
-            dv, t_es, rho_t, coeff_k1, coeff_k2, iz_real = formule.calcola_caduta_avanzata(mat, isol, posa, fasi, amp, metri, sez, cos_phi, temp_ambiente, iz_tabella, n_circuiti)
-            v_rif = 230.0 if fasi == "Monofase" else 400.0
-            pct = (dv / v_rif) * 100.0
-            
-            st.info(f"📊 **Declassamento:** Ambiente (K1) = {coeff_k1:.2f} | Raggruppamento (K2) = {coeff_k2:.2f}")
-            st.info(f"🔌 **Vera Portata massima ammessa (Iz definitiva):** {iz_real:.2f} A")
-            st.info(f"🔥 **Vera Temperatura interna conduttore sotto carico:** {t_es:.1f} °C | \u03c1_t = {rho_t:.5f}")
-            
-            if pct > 4.0: st.error(f"**Perdita:** {dv:.2f} V ({pct:.2f}%) ⚠️ Fuori norma > 4%")
-            else: st.success(f"**Perdita:** {dv:.2f} V ({pct:.2f}%) ✅ A norma")
+            dv, t_es, rho_t, k1, k2, iz_real = elettrica.calcola_caduta_avanzata(mat, isol, posa, fasi, amp, metri, sez, cos_phi, temp_ambiente, iz_tabella, n_circuiti)
+            pct = (dv / (230.0 if fasi == "Monofase" else 400.0)) * 100.0
+            st.info(f"📊 Declassamento: K1={k1:.2f}, K2={k2:.2f} | Portata reale Iz: {iz_real:.2f} A")
+            st.info(f"🔥 Temperatura interna cavo: {t_es:.1f} °C | \u03c1_t = {rho_t:.5f}")
+            st.error(f"**Perdita:** {dv:.2f} V ({pct:.2f}%) ⚠️ Fuori norma > 4%") if pct > 4.0 else st.success(f"**Perdita:** {dv:.2f} V ({pct:.2f}%) ✅ A norma")
             
     elif tipo == "Dimensionamento Protezioni":
         ib = st.number_input("Corrente Ib [A]:", value=16.0)
         j_dens = st.slider("Densità J [A/mm²]:", 1.0, 6.0, 4.0, step=0.5)
         if st.button("Trova Soluzione"):
-            mag, cavo, t_sez = formule.calcola_sezione_protezione(ib, j_dens)
-            st.success(f"🔒 Interruttore consigliato (In): {mag} A")
-            st.info(f"📐 Sezione Cavo commerciale: {cavo} mm²")
+            mag, cavo, t_sez = elettrica.calcola_sezione_protezione(ib, j_dens)
+            st.success(f"🔒 Interruttore consigliato (In): {mag} A | 📐 Sezione commerciale: {cavo} mm²")
 
+# ==============================================================================
+# AMBITO 3: MONDO PLC & AUTOMAZIONE 🤖
+# ==============================================================================
 else:
     st.header("🤖 Utility per PLC (RX3i Optimized)")
     tool_plc = st.selectbox("Seleziona Strumento:", ["Tipi Dati", "Scalatura Analogica", "Esplosione Parola nei Bit", "Calcolo Memoria RX3i"])
@@ -102,8 +95,7 @@ else:
     if tool_plc == "Tipi Dati":
         tipo_s = st.selectbox("Scegli Tipo:", ["BYTE", "WORD", "DWORD", "INT (Integer)", "UINT (Unsigned INT)", "DINT (Double INT)", "REAL (Float)"])
         dim, cat, v_min, v_max = automazione.info_tipo_dato(tipo_s)
-        st.info(f"Dimensione: {dim} | Categoria: {cat}")
-        st.success(f"Range: [{v_min} ➔ {v_max}]")
+        st.info(f"Dimensione: {dim} | Categoria: {cat} | Range: [{v_min} ➔ {v_max}]")
         
     elif tool_plc == "Scalatura Analogica":
         pre = st.selectbox("Risoluzione:", ["Siemens S7 (0 - 27648)", "GE RX3i (0 - 32000)", "16 Bit (0 - 65535)"])
