@@ -159,7 +159,8 @@ _DB_MODULI_ANALOGICI = {
             "±10 V (bip.)":    {"in_min": -2048, "in_max": 2047,  "unita": "V",  "note": ""},
             "±5 V (bip.)":     {"in_min": -2048, "in_max": 2047,  "unita": "V",  "note": ""},
             "0-20 mA":         {"in_min": 0,     "in_max": 4095,  "unita": "mA", "note": ""},
-            "4-20 mA":         {"in_min": 819,   "in_max": 4095,  "unita": "mA", "note": "4mA≈819, 20mA=4095. Wire break: raw<500 circa"},
+            "4-20 mA (scala 0-20 mA)":  {"in_min": 819,   "in_max": 4095,  "unita": "mA", "note": "PME: range 0-20mA. 4mA≈819, 20mA=4095. Wire break: raw<778"},
+            "4-20 mA (scala 4-20 mA)":  {"in_min": 0,     "in_max": 4095,  "unita": "mA", "note": "PME: range 4-20mA full. 4mA=0, 20mA=4095. Nessun wire break rilevabile"},
         },
     },
 
@@ -173,7 +174,8 @@ _DB_MODULI_ANALOGICI = {
             "0-10 V":          {"in_min": 0,     "in_max": 4095,  "unita": "V",  "note": ""},
             "±10 V (bip.)":    {"in_min": -2048, "in_max": 2047,  "unita": "V",  "note": ""},
             "0-20 mA":         {"in_min": 0,     "in_max": 4095,  "unita": "mA", "note": ""},
-            "4-20 mA":         {"in_min": 819,   "in_max": 4095,  "unita": "mA", "note": "4mA≈819"},
+            "4-20 mA (scala 0-20 mA)":  {"in_min": 819,   "in_max": 4095,  "unita": "mA", "note": "PME: range 0-20mA. 4mA≈819. Wire break: raw<778"},
+            "4-20 mA (scala 4-20 mA)":  {"in_min": 0,     "in_max": 4095,  "unita": "mA", "note": "PME: range 4-20mA full. 4mA=0, 20mA=4095"},
         },
     },
 
@@ -187,7 +189,8 @@ _DB_MODULI_ANALOGICI = {
             "0-10 V":          {"in_min": 0,     "in_max": 4095,  "unita": "V",  "note": ""},
             "±10 V (bip.)":    {"in_min": -2048, "in_max": 2047,  "unita": "V",  "note": ""},
             "0-20 mA":         {"in_min": 0,     "in_max": 4095,  "unita": "mA", "note": ""},
-            "4-20 mA":         {"in_min": 819,   "in_max": 4095,  "unita": "mA", "note": "4mA≈819"},
+            "4-20 mA (scala 0-20 mA)":  {"in_min": 819,   "in_max": 4095,  "unita": "mA", "note": "PME: range 0-20mA. 4mA≈819. Wire break: raw<778"},
+            "4-20 mA (scala 4-20 mA)":  {"in_min": 0,     "in_max": 4095,  "unita": "mA", "note": "PME: range 4-20mA full. 4mA=0, 20mA=4095"},
         },
     },
 
@@ -195,8 +198,8 @@ _DB_MODULI_ANALOGICI = {
         "famiglia":  "IC694",
         "canali":    4,
         "tipo":      "Input TC",
-        "resol":     "0.1 °C per digit (es. raw 250 = 25.0 °C)",
-        "note_mod":  "Tipo termocoppia configurabile per canale in PME. Raw = °C × 10.",
+        "resol":     "0.1 °C per digit — predefinito (es. raw 250 = 25.0 °C)",
+        "note_mod":  "Tipo TC configurabile per canale in PME. Raw = °C × 10 nella modalità predefinita. ATTENZIONE: alcune versioni firmware usano 1°C/digit (raw=°C). Verificare con GFK-0466 e versione firmware. Codice fault out-of-range: 32767 (0x7FFF).",
         "config": {
             "Tipo J  (-200 → +900 °C)":   {"in_min": -2000, "in_max": 9000,  "unita": "×0.1°C", "note": ""},
             "Tipo K  (-200 → +1370 °C)":  {"in_min": -2000, "in_max": 13700, "unita": "×0.1°C", "note": ""},
@@ -213,8 +216,8 @@ _DB_MODULI_ANALOGICI = {
         "famiglia":  "IC694",
         "canali":    4,
         "tipo":      "Input RTD",
-        "resol":     "0.1 °C per digit (es. raw 1234 = 123.4 °C)",
-        "note_mod":  "Tipo RTD configurabile per canale in PME. Raw = °C × 10.",
+        "resol":     "0.1 °C per digit — predefinito (es. raw 1234 = 123.4 °C)",
+        "note_mod":  "Tipo RTD configurabile per canale in PME. Raw = °C × 10 nella modalità predefinita. Codice open-circuit/fault: 32767 (0x7FFF). Codice short-circuit: -32768 (0x8000).",
         "config": {
             "Pt100  (-200 → +870 °C)":   {"in_min": -2000, "in_max": 8700,  "unita": "×0.1°C", "note": ""},
             "Pt1000 (-200 → +870 °C)":   {"in_min": -2000, "in_max": 8700,  "unita": "×0.1°C", "note": ""},
@@ -232,17 +235,21 @@ _DB_MODULI_ANALOGICI = {
         "canali":    4,
         "tipo":      "Input",
         "resol":     "15-bit effettivi, scalati a 0-32000",
-        "note_mod":  "Modulo universale. Ogni canale configurabile indipendentemente in PME.",
+        "note_mod":  "Modulo universale. Ogni canale configurabile in PME. ATTENZIONE: PME supporta 3 modalità output: (1) DEFAULT 0-32000/±32000, (2) Engineering Units (es. mV, µA×10), (3) User-defined range. Verificare sempre la modalità configurata nel progetto PME.",
         "config": {
             "0-10 V":                  {"in_min": 0,      "in_max": 32000,  "unita": "V",  "note": ""},
             "0-5 V":                   {"in_min": 0,      "in_max": 32000,  "unita": "V",  "note": ""},
             "0-1 V":                   {"in_min": 0,      "in_max": 32000,  "unita": "V",  "note": ""},
-            "±10 V (bip.)":            {"in_min": -32000, "in_max": 32000,  "unita": "V",  "note": ""},
-            "±5 V (bip.)":             {"in_min": -32000, "in_max": 32000,  "unita": "V",  "note": ""},
+            "±10 V (bip.)":            {"in_min": -32000, "in_max": 32000,  "unita": "V",  "note": "Fault/out-of-range: raw=-32768 (0x8000)"},
+            "±5 V (bip.)":             {"in_min": -32000, "in_max": 32000,  "unita": "V",  "note": "Fault/out-of-range: raw=-32768 (0x8000)"},
             "0-20 mA":                 {"in_min": 0,      "in_max": 32000,  "unita": "mA", "note": ""},
-            "4-20 mA (su scala 0-20)": {"in_min": 6400,   "in_max": 32000,  "unita": "mA", "note": "4mA=6400, 20mA=32000. Wire break: raw<3840"},
+            "4-20 mA (su scala 0-20)": {"in_min": 6400,   "in_max": 32000,  "unita": "mA", "note": "4mA=6400. Wire break: raw<6080 (5% di 6400)"},
             "4-20 mA (su scala 4-20)": {"in_min": 0,      "in_max": 32000,  "unita": "mA", "note": "Se PME configurato 4-20mA full scale: 4mA=0"},
             "±20 mA (bip.)":           {"in_min": -32000, "in_max": 32000,  "unita": "mA", "note": ""},
+            "EU: 0-10V (millivolt)":   {"in_min": 0,      "in_max": 10000,  "unita": "mV", "note": "Modalità Engineering Units PME. 1 digit = 1 mV"},
+            "EU: 0-20mA (in µA)":       {"in_min": 0,      "in_max": 20000,  "unita": "µA",    "note": "Modalità EU PME. 1 digit = 1 µA. 0mA=0, 20mA=20000"},
+            "EU: 4-20mA (in µA)":       {"in_min": 4000,   "in_max": 20000,  "unita": "µA",    "note": "Modalità EU PME. 1 digit = 1 µA. 4mA=4000, 20mA=20000. Wire break: raw<3800"},
+            "User-defined (PME)":      {"in_min": 0,      "in_max": 32000,  "unita": "custom", "note": "Range interamente definito in PME. Usare inserimento manuale."},
         },
     },
 
@@ -318,7 +325,8 @@ _DB_MODULI_ANALOGICI = {
             "0-5 V":           {"in_min": 0,     "in_max": 4095,  "unita": "V",  "note": ""},
             "±10 V (bip.)":    {"in_min": -2048, "in_max": 2047,  "unita": "V",  "note": ""},
             "0-20 mA":         {"in_min": 0,     "in_max": 4095,  "unita": "mA", "note": ""},
-            "4-20 mA":         {"in_min": 819,   "in_max": 4095,  "unita": "mA", "note": "4mA≈819"},
+            "4-20 mA (scala 0-20 mA)":  {"in_min": 819,   "in_max": 4095,  "unita": "mA", "note": "PME: range 0-20mA. 4mA≈819. Wire break: raw<778"},
+            "4-20 mA (scala 4-20 mA)":  {"in_min": 0,     "in_max": 4095,  "unita": "mA", "note": "PME: range 4-20mA full. 4mA=0, 20mA=4095"},
         },
     },
 
@@ -339,6 +347,124 @@ _DB_MODULI_ANALOGICI = {
     },
 
     # ================================================================
+    # IC694 — moduli COMBO e varianti mancanti
+    # ================================================================
+
+    "IC694ALG391 — 4ch AI + 2ch AO combo (12-bit)": {
+        "famiglia":  "IC694",
+        "canali":    6,   # 4 AI + 2 AO
+        "tipo":      "Input+Output combo",
+        "resol":     "12-bit (0-4095 counts per AI e AO)",
+        "note_mod":  "Modulo combinato: 4 ingressi analogici + 2 uscite analogiche. "
+                     "Configurazione AI identica a IC694ALG220. "
+                     "Configurazione AO identica a IC694ALG390. "
+                     "Rif. manuale: GFK-0466.",
+        "config": {
+            # --- AI (ingressi) ---
+            "AI: 0-10 V":                   {"in_min": 0,    "in_max": 4095,  "unita": "V",  "note": "Ingresso"},
+            "AI: 0-5 V":                    {"in_min": 0,    "in_max": 4095,  "unita": "V",  "note": "Ingresso"},
+            "AI: ±10 V (bip.)":             {"in_min": -2048,"in_max": 2047,  "unita": "V",  "note": "Ingresso"},
+            "AI: 0-20 mA":                  {"in_min": 0,    "in_max": 4095,  "unita": "mA", "note": "Ingresso"},
+            "AI: 4-20 mA (scala 0-20 mA)":  {"in_min": 819,  "in_max": 4095,  "unita": "mA", "note": "4mA≈819. Wire break: raw<778"},
+            "AI: 4-20 mA (scala 4-20 mA)":  {"in_min": 0,    "in_max": 4095,  "unita": "mA", "note": "4mA=0, 20mA=4095"},
+            # --- AO (uscite) ---
+            "AO: 0-10 V":                   {"in_min": 0,    "in_max": 4095,  "unita": "V",  "note": "Uscita — scrivere in %AQ"},
+            "AO: ±10 V (bip.)":             {"in_min": -2048,"in_max": 2047,  "unita": "V",  "note": "Uscita — scrivere in %AQ"},
+            "AO: 0-20 mA":                  {"in_min": 0,    "in_max": 4095,  "unita": "mA", "note": "Uscita — scrivere in %AQ"},
+            "AO: 4-20 mA":                  {"in_min": 819,  "in_max": 4095,  "unita": "mA", "note": "Uscita 4mA≈819 — scrivere in %AQ"},
+        },
+    },
+
+    # ================================================================
+    # IC693 — famiglia Series 90-30 (backplane compatto, compatibile RX3i)
+    # Range identici agli equivalenti IC694 (stesso ADC 12-bit)
+    # ================================================================
+
+    "IC693ALG220 — 4ch Analog Input S90-30 (12-bit)": {
+        "famiglia":  "IC693",
+        "canali":    4,
+        "tipo":      "Input",
+        "resol":     "12-bit (0-4095 counts) — identico a IC694ALG220",
+        "note_mod":  "Modulo per backplane Series 90-30. Range e configurazioni identici "
+                     "a IC694ALG220. Compatibile con rack IC693 in RX3i tramite adattatore. "
+                     "Rif. manuale: GFK-0466.",
+        "config": {
+            "0-10 V":                  {"in_min": 0,    "in_max": 4095,  "unita": "V",  "note": ""},
+            "0-5 V":                   {"in_min": 0,    "in_max": 4095,  "unita": "V",  "note": ""},
+            "±10 V (bip.)":            {"in_min": -2048,"in_max": 2047,  "unita": "V",  "note": ""},
+            "0-20 mA":                 {"in_min": 0,    "in_max": 4095,  "unita": "mA", "note": ""},
+            "4-20 mA (scala 0-20 mA)": {"in_min": 819,  "in_max": 4095,  "unita": "mA", "note": "4mA≈819. Wire break: raw<778"},
+            "4-20 mA (scala 4-20 mA)": {"in_min": 0,    "in_max": 4095,  "unita": "mA", "note": "4mA=0, 20mA=4095"},
+        },
+    },
+
+    "IC693ALG222 — 8ch Analog Input S90-30 (12-bit)": {
+        "famiglia":  "IC693",
+        "canali":    8,
+        "tipo":      "Input",
+        "resol":     "12-bit (0-4095 counts) — identico a IC694ALG222",
+        "note_mod":  "8 canali su backplane Series 90-30. Range identici a IC694ALG222. "
+                     "Rif. manuale: GFK-0466.",
+        "config": {
+            "0-10 V":                  {"in_min": 0,    "in_max": 4095,  "unita": "V",  "note": ""},
+            "±10 V (bip.)":            {"in_min": -2048,"in_max": 2047,  "unita": "V",  "note": ""},
+            "0-20 mA":                 {"in_min": 0,    "in_max": 4095,  "unita": "mA", "note": ""},
+            "4-20 mA (scala 0-20 mA)": {"in_min": 819,  "in_max": 4095,  "unita": "mA", "note": "4mA≈819"},
+            "4-20 mA (scala 4-20 mA)": {"in_min": 0,    "in_max": 4095,  "unita": "mA", "note": "4mA=0"},
+        },
+    },
+
+    "IC693ALG390 — 2ch Analog Output S90-30 (12-bit)": {
+        "famiglia":  "IC693",
+        "canali":    2,
+        "tipo":      "Output",
+        "resol":     "12-bit — identico a IC694ALG390",
+        "note_mod":  "Uscita analogica per backplane S90-30. Range identici a IC694ALG390.",
+        "config": {
+            "0-10 V":       {"in_min": 0,    "in_max": 4095,  "unita": "V",  "note": ""},
+            "±10 V (bip.)": {"in_min": -2048,"in_max": 2047,  "unita": "V",  "note": ""},
+            "0-20 mA":      {"in_min": 0,    "in_max": 4095,  "unita": "mA", "note": ""},
+            "4-20 mA":      {"in_min": 819,  "in_max": 4095,  "unita": "mA", "note": "4mA≈819"},
+        },
+    },
+
+    "IC693ALG740 — 4ch Thermocouple S90-30": {
+        "famiglia":  "IC693",
+        "canali":    4,
+        "tipo":      "Input TC",
+        "resol":     "0.1 °C per digit — identico a IC694ALG740",
+        "note_mod":  "TC per backplane S90-30. Tipi e range identici a IC694ALG740. "
+                     "Raw = °C × 10. Fault: 32767 (0x7FFF).",
+        "config": {
+            "Tipo J  (-200 → +900 °C)":  {"in_min": -2000, "in_max": 9000,  "unita": "×0.1°C", "note": ""},
+            "Tipo K  (-200 → +1370 °C)": {"in_min": -2000, "in_max": 13700, "unita": "×0.1°C", "note": ""},
+            "Tipo E  (-200 → +1000 °C)": {"in_min": -2000, "in_max": 10000, "unita": "×0.1°C", "note": ""},
+            "Tipo T  (-200 → +400 °C)":  {"in_min": -2000, "in_max": 4000,  "unita": "×0.1°C", "note": ""},
+            "Tipo R  (0 → +1760 °C)":    {"in_min": 0,     "in_max": 17600, "unita": "×0.1°C", "note": ""},
+            "Tipo S  (0 → +1760 °C)":    {"in_min": 0,     "in_max": 17600, "unita": "×0.1°C", "note": ""},
+            "Tipo B  (+200 → +1820 °C)": {"in_min": 2000,  "in_max": 18200, "unita": "×0.1°C", "note": ""},
+        },
+    },
+
+    "⚠ Modulo non in lista — Usa inserimento manuale": {
+        "famiglia":  "Custom",
+        "canali":    -1,
+        "tipo":      "Vedi PME",
+        "resol":     "Da verificare nella Hardware Configuration di PME",
+        "note_mod":  "Moduli non coperti dal database (es. IC695ALG626 CT input, "
+                     "IC695ALG728 combo, moduli VersaMax remoti su Genius/Profibus, "
+                     "IC694ALG741/781 enhanced TC/RTD, moduli HART-capable): "
+                     "consultare il manuale GFK specifico del modulo e usare "
+                     "'Inserimento manuale range' nella sezione Scalatura.",
+        "config": {
+            "Vai a: Scalatura Analogica → Inserimento manuale range": {
+                "in_min": 0, "in_max": 32000, "unita": "custom",
+                "note": "Inserire i valori raw min/max letti da PME Hardware Configuration"
+            },
+        },
+    },
+
+        # ================================================================
     # Siemens S7-300/400 — per confronto
     # ================================================================
 

@@ -1,3 +1,4 @@
+import math
 # ==============================================================================
 # idraulica.py — Conversioni di unità di misura industriali
 # Tutte le grandezze usano l'unità SI come perno interno.
@@ -30,7 +31,11 @@ def ottieni_categorie():
             "psig": 6_894.757,      # relativa → serve offset P_atm
             "mmhg": 133.322387,
             "torr": 133.322368,
-            "mca":  1.0 / MCA_PER_PA,                    # ≈ 9806.65 Pa  (= rho_acqua * g)
+            "mca":  1.0 / MCA_PER_PA,          # ≈ 9806.65 Pa  (= ρ_acqua × g)
+            "at":   98_066.5,                  # atmosfera tecnica: 1 kgf/cm² = 98066.5 Pa
+            "cmH2O": 98.0665,                  # colonna d acqua: 1 cmH2O = ρ×g×0.01 m = 98.0665 Pa
+            "inH2O": 249.08890,                # pollici d acqua (4°C): 0.0254 × 9806.65 = 249.089 Pa
+            "inHg":  3_386.389,                # pollici di mercurio: 0.0254 × 133322.4 = 3386.39 Pa
         },
         # ------------------------------------------------------------------ #
         "Portata volumetrica": {
@@ -146,7 +151,7 @@ def ottieni_categorie():
             "kwh":  3_600_000.0,
             "mwh":  3_600_000_000.0,
             "btu":  1_055.056,
-            "ev":   1.60217663e-19,
+            "ev":   1.602176634e-19,   # CODATA 2018 / SI 2019: valore esatto per definizione
         },
         # ------------------------------------------------------------------ #
         "Potenza": {
@@ -182,11 +187,11 @@ def ottieni_categorie():
         "Angolo": {
             # Perno: radiante (rad)
             "rad":  1.0,
-            "deg":  3.14159265358979 / 180.0,
-            "grad": 3.14159265358979 / 200.0,
-            "turn": 2.0 * 3.14159265358979,
-            "arcmin": 3.14159265358979 / 10_800.0,
-            "arcsec": 3.14159265358979 / 648_000.0,
+            "deg":  math.pi / 180.0,
+            "grad": math.pi / 200.0,
+            "turn": 2.0 * math.pi,
+            "arcmin": math.pi / 10_800.0,
+            "arcsec": math.pi / 648_000.0,
         },
         # ------------------------------------------------------------------ #
         "Temperatura": {

@@ -304,7 +304,8 @@ def calcola_sezione_protezione(i_max, densita):
 
 def calcola_corrente_cortocircuito(
     tensione_v, potenza_trafo_kva, vcc_pct,
-    materiale, sez, lunghezza_m, fasi
+    materiale, sez, lunghezza_m, fasi,
+    c: float = 0.95
 ):
     """
     Stima la corrente di cortocircuito presunta in fondo a una linea.
@@ -327,7 +328,10 @@ def calcola_corrente_cortocircuito(
     z_trafo  : float — impedenza trafo [mΩ]
     z_cavo   : float — impedenza cavo [mΩ]
     """
-    c = 0.95   # fattore tensione per BT (IEC 60909 Tabella 1)
+    # IEC 60909 Tabella 1 — fattore di tensione c:
+    #   c = 1.05  → Icc MASSIMA  (per verificare potere di interruzione interruttori)
+    #   c = 0.95  → Icc MINIMA   (per coordinamento protezioni, backup protection)
+    # Il valore di c viene passato dall'utente; default conservativo 0.95.
 
     # Impedenza del trasformatore [mΩ]
     # Ztrafo = (Vcc% / 100) × (U²_n / S_trafo)
