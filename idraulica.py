@@ -7,6 +7,9 @@ import math
 from costanti import PRESSIONE_ATM_PA, DENSITA_ACQUA_KG_M3, GRAVITA_STD, MCA_PER_PA
 
 
+ZERO_ASSOLUTO_K = 0.0
+
+
 def ottieni_categorie():
     """
     Restituisce il dizionario delle grandezze supportate con i fattori di
@@ -250,8 +253,21 @@ def esegui_conversione(cat, from_u, to_u, val):
     float — valore convertito
     """
     categories = ottieni_categorie()
+    if cat not in categories:
+        raise ValueError(f"Categoria non riconosciuta: '{cat}'.")
+    if from_u not in categories[cat]:
+        raise ValueError(f"UnitÃ  sorgente non valida per la categoria '{cat}': '{from_u}'.")
+    if to_u not in categories[cat]:
+        raise ValueError(f"UnitÃ  destinazione non valida per la categoria '{cat}': '{to_u}'.")
 
     if cat == "Temperatura":
+        if (
+            (from_u == "c" and val < -273.15) or
+            (from_u == "f" and val < -459.67) or
+            (from_u == "k" and val < ZERO_ASSOLUTO_K) or
+            (from_u == "r" and val < ZERO_ASSOLUTO_K)
+        ):
+            raise ValueError("La temperatura non puÃ² scendere sotto lo zero assoluto.")
         kelvin = _a_kelvin(val, from_u)
         return _da_kelvin(kelvin, to_u)
 

@@ -29,14 +29,14 @@ with tab_conv:
 
     modo_conv = st.radio(
         "Modalità:",
-        ["Da → A  (standard)", "Multi-unità live  (scrivi in qualsiasi campo)"],
+        ["Da → A (standard)", "Multi-unità live (scrivi in qualsiasi campo)"],
         key="conv_modo", horizontal=True
     )
 
     # ------------------------------------------------------------------
     # MODALITÀ STANDARD
     # ------------------------------------------------------------------
-    if modo_conv == "Da → A  (standard)":
+    if modo_conv == "Da → A (standard)":
         cat = st.selectbox("Grandezza:", list(categories.keys()), key="conv_cat")
         units = list(categories[cat].keys())
 
@@ -47,8 +47,11 @@ with tab_conv:
             to_u = st.selectbox("A:", units, index=1 if len(units) > 1 else 0, key="conv_to")
 
         val = st.number_input("Valore:", value=0.0, format="%.6g", key="conv_val")
-        res = idraulica.esegui_conversione(cat, from_u, to_u, val)
-        st.success(f"**Risultato:** {res:.6g} {to_u}")
+        try:
+            res = idraulica.esegui_conversione(cat, from_u, to_u, val)
+            st.success(f"**Risultato:** {res:.6g} {to_u}")
+        except ValueError as e:
+            st.error(str(e))
 
         if cat in ("Forza", "Massa"):
             st.caption("ℹ️ Forza e Massa sono grandezze fisicamente distinte.")
@@ -183,6 +186,9 @@ with tab_elett:
             i = st.number_input("Corrente (Ampere):", value=10.0, key="pot_i")
             if st.button("Analizza Potenze", key="pot_btn_va"):
                 res = formule.calcola_potenza_e_corrente(sis, v, i, 0.0, cos_phi, obiettivo)
+                if res is None:
+                    st.error("Valori non validi: controlla tensione, corrente e cos phi.")
+                    st.stop()
                 st.success(f"🔌 **Potenza Attiva:** {res['W']:.1f} W ({res['kW']:.4f} kW)")
                 st.info(f"🐎 **Meccanica:** {res['HP']:.3f} HP | {res['CV']:.3f} CV")
                 st.info(f"📊 **Apparente:** {res['VA']:.1f} VA ({res['kVA']:.4f} kVA)")
@@ -237,7 +243,7 @@ with tab_elett:
         if st.button("Calcola assorbimento", key="mot_btn"):
             res_m = formule.calcola_ingresso_motore(p_out, eta_pct, sis_mot, v_mot, cosphi_m)
             if res_m is None:
-                st.error("Rendimento non valido.")
+                st.error("Valori non validi: controlla potenza, rendimento, tensione e cos phi.")
             else:
                 st.success(
                     f"🔌 **Potenza assorbita dalla rete:** {res_m['P_in_kW']:.3f} kW "
@@ -409,7 +415,7 @@ with tab_plc:
 
     # --- Info CPU ---
     if tool_plc == "Info CPU & Memoria RX3i":
-        cpu_list = list(automazione._DB_CPU_RX3I.keys())
+        cpu_list = automazione.lista_cpu_rx3i()
         cpu_sel  = st.selectbox("Seleziona modello CPU:", cpu_list, key="cpu_sel")
         info     = automazione.info_cpu_rx3i(cpu_sel)
         if info:

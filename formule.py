@@ -12,6 +12,12 @@ from costanti import (
 )
 
 
+def _valida_cos_phi(cos_phi):
+    """Verifica che il fattore di potenza sia compreso tra 0 e 1."""
+    if not 0.0 < cos_phi <= 1.0:
+        raise ValueError("Il fattore di potenza (cos phi) deve essere compreso tra 0 e 1.")
+
+
 # ------------------------------------------------------------------------------
 # Legge di Ohm
 # ------------------------------------------------------------------------------
@@ -62,7 +68,17 @@ def calcola_potenza_e_corrente(sistema, volt, ampere, watt, cos_phi, calcola_cos
     fattore_trifase = math.sqrt(3) if sistema == "Trifase" else 1.0
     c_phi = 1.0 if sistema == "DC" else cos_phi
 
+    if volt <= 0:
+        return None
+    if sistema != "DC":
+        try:
+            _valida_cos_phi(c_phi)
+        except ValueError:
+            return None
+
     if calcola_cosa == "Estrai da Volt e Ampere":
+        if ampere < 0:
+            return None
         p_attiva    = volt * ampere * c_phi * fattore_trifase
         p_apparente = volt * ampere * fattore_trifase
         p_reattiva  = (
@@ -81,6 +97,8 @@ def calcola_potenza_e_corrente(sistema, volt, ampere, watt, cos_phi, calcola_cos
         }
 
     else:  # Estrai Corrente da Watt
+        if watt < 0:
+            return None
         denominatore = volt * c_phi * fattore_trifase
         if denominatore == 0:
             return None
@@ -129,6 +147,11 @@ def converti_potenza(valore, da_unita, a_unita, cos_phi=1.0):
     if a_unita not in unita_valide:
         raise ValueError(f"Unità destinazione non riconosciuta: '{a_unita}'. Valide: {sorted(unita_valide)}")
 
+    if valore < 0:
+        raise ValueError("La potenza da convertire non puÃ² essere negativa.")
+    if da_unita == "kVA" or a_unita == "kVA":
+        _valida_cos_phi(cos_phi)
+
     c_phi = max(cos_phi, 0.01)   # protezione divisione per zero su kVA
 
     # Conversione verso Watt
@@ -163,7 +186,9 @@ def calcola_rifasamento_kvar(p_attiva_kw, cos_ini, cos_fin):
     qc_kvar : float — potenza rifasante necessaria [kVAR]
     stato   : str   — 'OK' oppure messaggio di avviso
     """
-    if cos_ini <= 0 or cos_fin <= 0:
+    if p_attiva_kw < 0:
+        return 0.0, "Errore: la potenza attiva non puÃ² essere negativa."
+    if cos_ini <= 0 or cos_fin <= 0 or cos_ini > 1 or cos_fin > 1:
         return 0.0, "Errore: fattori di potenza non validi."
     if cos_ini >= cos_fin:
         return 0.0, "Il fattore di potenza è già ottimale o superiore al target."
@@ -206,6 +231,22 @@ def calcola_caduta_avanzata(
     """
 
     # 1. Resistività base a 20°C
+    if materiale not in ("Rame", "Alluminio"):
+        raise ValueError("Materiale non riconosciuto.")
+    if fasi not in ("Monofase", "Trifase"):
+        raise ValueError("Sistema di fase non riconosciuto.")
+    if amp < 0:
+        raise ValueError("La corrente di impiego non puÃ² essere negativa.")
+    if metri < 0:
+        raise ValueError("La lunghezza della linea non puÃ² essere negativa.")
+    if sez <= 0:
+        raise ValueError("La sezione del conduttore deve essere maggiore di zero.")
+    if iz_nominale <= 0:
+        raise ValueError("La portata nominale Iz deve essere maggiore di zero.")
+    if num_circuiti < 1:
+        raise ValueError("Il numero di circuiti deve essere almeno 1.")
+    _valida_cos_phi(cos_phi)
+
     rho_20 = RHO_RAME_20 if materiale == "Rame" else RHO_ALLUMINIO_20
 
     # 2. Temperatura massima di esercizio dell'isolante
@@ -281,6 +322,11 @@ def calcola_sezione_protezione(i_max, densita):
     ---------------
     interruttore, sezione_scelta, sezione_teorica
     """
+    if i_max < 0:
+        raise ValueError("La corrente di impiego non puÃ² essere negativa.")
+    if densita <= 0:
+        raise ValueError("La densitÃ  di corrente deve essere maggiore di zero.")
+
     sezione_teorica = i_max / densita
 
     sezione_scelta = SEZIONI_COMMERCIALI[-1]
@@ -335,8 +381,22 @@ def calcola_corrente_cortocircuito(
 
     # Impedenza del trasformatore [mΩ]
     # Ztrafo = (Vcc% / 100) × (U²_n / S_trafo)
+    if tensione_v <= 0:
+        raise ValueError("La tensione nominale deve essere > 0 V.")
     if potenza_trafo_kva <= 0:
         raise ValueError("La potenza del trasformatore deve essere > 0 kVA.")
+    if vcc_pct <= 0:
+        raise ValueError("La Vcc del trasformatore deve essere > 0%.")
+    if materiale not in ("Rame", "Alluminio"):
+        raise ValueError("Materiale non riconosciuto.")
+    if sez <= 0:
+        raise ValueError("La sezione del conduttore deve essere > 0 mmÂ².")
+    if lunghezza_m < 0:
+        raise ValueError("La lunghezza della linea non puÃ² essere negativa.")
+    if fasi not in ("Monofase", "Trifase"):
+        raise ValueError("Sistema di fase non riconosciuto.")
+    if c <= 0:
+        raise ValueError("Il fattore di tensione IEC 60909 deve essere > 0.")
     z_trafo_ohm = (vcc_pct / 100.0) * (tensione_v ** 2) / (potenza_trafo_kva * 1000.0)
     z_trafo_mo  = z_trafo_ohm * 1000.0
 
@@ -387,7 +447,15 @@ def calcola_ingresso_motore(
     ---------------
     P_in_kw, P_in_w, I_A, P_app_kva, rendimento_decimale
     """
+    if p_out_kw < 0:
+        return None
     if rendimento_pct <= 0 or rendimento_pct > 100:
+        return None
+    if tensione_v <= 0:
+        return None
+    try:
+        _valida_cos_phi(cos_phi)
+    except ValueError:
         return None
 
     eta = rendimento_pct / 100.0
@@ -407,4 +475,3 @@ def calcola_ingresso_motore(
         "HP_in":    p_in_w / WATT_PER_HP,
         "eta":      eta,
     }
-
