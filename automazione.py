@@ -126,6 +126,11 @@ def info_cpu_rx3i(modello):
     return _DB_CPU_RX3I.get(modello, None)
 
 
+def lista_cpu_rx3i():
+    """Ritorna la lista dei modelli CPU RX3i disponibili."""
+    return list(_DB_CPU_RX3I.keys())
+
+
 # ------------------------------------------------------------------------------
 # Database moduli analogici PACSystems RX3i
 #

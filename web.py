@@ -188,7 +188,16 @@ with tab_elett:
                 res = formule.calcola_potenza_e_corrente(sis, v, i, 0.0, cos_phi, obiettivo)
                 if res is None:
                     st.error("Valori non validi: controlla tensione, corrente e cos phi.")
-                    st.stop()
+                    res = {
+                        "W": math.nan,
+                        "kW": math.nan,
+                        "VA": math.nan,
+                        "kVA": math.nan,
+                        "VAR": math.nan,
+                        "kVAR": math.nan,
+                        "HP": math.nan,
+                        "CV": math.nan,
+                    }
                 st.success(f"🔌 **Potenza Attiva:** {res['W']:.1f} W ({res['kW']:.4f} kW)")
                 st.info(f"🐎 **Meccanica:** {res['HP']:.3f} HP | {res['CV']:.3f} CV")
                 st.info(f"📊 **Apparente:** {res['VA']:.1f} VA ({res['kVA']:.4f} kVA)")
@@ -415,7 +424,10 @@ with tab_plc:
 
     # --- Info CPU ---
     if tool_plc == "Info CPU & Memoria RX3i":
-        cpu_list = automazione.lista_cpu_rx3i()
+        if hasattr(automazione, "lista_cpu_rx3i"):
+            cpu_list = automazione.lista_cpu_rx3i()
+        else:
+            cpu_list = list(getattr(automazione, "_DB_CPU_RX3I", {}).keys())
         cpu_sel  = st.selectbox("Seleziona modello CPU:", cpu_list, key="cpu_sel")
         info     = automazione.info_cpu_rx3i(cpu_sel)
         if info:
