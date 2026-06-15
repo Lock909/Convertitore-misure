@@ -161,33 +161,49 @@ with st.sidebar:
 
 # ── Home ──────────────────────────────────────────────────────────────────────
 
+_NAV_MAP = {
+    "⚖️  Conversioni":              "⚖️  Conversioni",
+    "⚡  Calcoli Elettrici":        "⚡  Calcoli Elettrici",
+    "🤖  PLC e Automazione":        "🤖  PLC e Automazione",
+    "〜  Vibrazioni":               "〜  Vibrazioni",
+    "🔩  Meccanica":                "🔩  Meccanica",
+    "🔧  Pneumatica & Strumenti":   "🔧  Pneumatica & Strumenti",
+    "🌡️  Termotecnica & Impianti":  "🌡️  Termotecnica & Impianti",
+}
+
 if categoria == "🏠  Home":
     st.title("⚙️ Strumento Multifunzione Industriale")
-    st.markdown("Calcoli tecnici per ingegneria industriale. Seleziona una sezione dalla sidebar o clicca una categoria.")
+    st.markdown("Calcoli tecnici per ingegneria industriale. Clicca una sezione per iniziare.")
     st.markdown("---")
-    cols = st.columns(4)
-    cards = [
-        ("⚖️", "Conversioni",        "conv",  "Unità, pressione, temperatura, …",  "Universale"),
-        ("⚡", "Calcoli Elettrici",  "elett", "Ohm, sezioni, motori, classi IE",    "CEI 64-8"),
-        ("🤖", "PLC e Automazione",  "plc",   "GE RX3i, scalature, tipi dato",      "IEC 61131"),
-        ("〜", "Vibrazioni",         "vib",   "ISO 10816, squilibrio ISO 1940",     "ISO 10816"),
-        ("🔩", "Meccanica",          "mec",   "Trasmissioni, pompe, travi, bulloni","ISO 898-1"),
-        ("🔧", "Pneumatica & Strum", "strum", "Aria compressa, TC, Pt100, errori",  "IEC 60751"),
-        ("🌡️", "Termotecnica",       "termo", "Scambiatori, illuminotecnica",       "EN 12464-1"),
+
+    _HOME_CARDS = [
+        ("⚖️", "Conversioni",          "⚖️  Conversioni",            "Unità, pressione, temperatura", "Universale"),
+        ("⚡", "Calcoli Elettrici",    "⚡  Calcoli Elettrici",       "Ohm, motori, sezioni, IE",      "CEI 64-8"),
+        ("🤖", "PLC e Automazione",    "🤖  PLC e Automazione",       "GE RX3i, scalature, tipi dato", "IEC 61131-3"),
+        ("〜", "Vibrazioni",           "〜  Vibrazioni",              "ISO 10816, squilibrio rotori",  "ISO 10816"),
+        ("🔩", "Meccanica",            "🔩  Meccanica",               "Travi, pompe, bulloni, trasm.", "ISO 898-1"),
+        ("🔧", "Pneumatica & Strum.",  "🔧  Pneumatica & Strumenti",  "Aria compressa, TC, Pt100",     "IEC 60751"),
+        ("🌡️", "Termotecnica",         "🌡️  Termotecnica & Impianti", "Scambiatori, illuminotecnica",  "EN 12464-1"),
     ]
-    for i, (icon, label, _cls, desc, norma) in enumerate(cards):
+
+    cols = st.columns(4)
+    for i, (icon, label, nav_key, desc, norma) in enumerate(_HOME_CARDS):
         with cols[i % 4]:
             st.markdown(
-                f'<div class="home-card"><div class="icon">{icon}</div>'
-                f'<div class="label">{label}</div>'
-                f'<div class="count">{desc}</div>'
-                f'<div class="count" style="color:#888;margin-top:4px;font-size:0.7rem">{norma}</div>'
-                f"</div>",
+                f'<div style="border:1px solid #e0e4ee;border-radius:10px;padding:0.8rem 0.7rem 0.6rem;'
+                f'text-align:center;background:#fff;margin-bottom:0.5rem;">'
+                f'<div style="font-size:1.9rem;line-height:1.2">{icon}</div>'
+                f'<div style="font-weight:700;font-size:0.88rem;color:#222;margin:4px 0 2px">{label}</div>'
+                f'<div style="font-size:0.73rem;color:#666">{desc}</div>'
+                f'<div style="font-size:0.68rem;color:#aaa;margin-top:3px">{norma}</div>'
+                f'</div>',
                 unsafe_allow_html=True,
             )
-            st.markdown("")
+            if st.button("Apri", key=f"home_btn_{i}", use_container_width=True):
+                st.session_state["sidebar_cat"] = nav_key
+                st.rerun()
     st.markdown("---")
-    st.caption("Basato su CEI 64-8 · ISO 10816 · ISO 1940 · IEC 60751 · NIST ITS-90 · ISO 898-1 · EN 12464-1 · IEC 60034-30")
+    st.caption("CEI 64-8 · ISO 10816 · ISO 1940 · IEC 60751 · NIST ITS-90 · ISO 898-1 · EN 12464-1 · IEC 60034-30")
 
 
 elif categoria == "⚖️  Conversioni":
@@ -296,8 +312,9 @@ elif categoria == "⚡  Calcoli Elettrici":
             "Caduta di Tensione",
             "Corrente di Cortocircuito (Icc)",
             "Dimensionamento Protezioni",
-        "Motore Asincrono — Dati di Targa",
-        "Motore Asincrono — Classi IE (Efficienza)",
+            "Carico Trifase",
+            "Motore Asincrono — Dati di Targa",
+            "Motore Asincrono — Classi IE (Efficienza)",
         ],
         key="elett_tipo",
     )
@@ -510,6 +527,118 @@ elif categoria == "⚡  Calcoli Elettrici":
                 st.success(f"Interruttore consigliato (In): {mag} A | Sezione commerciale: {cavo} mm2 (teorica: {t_sez:.2f} mm2)")
             except ValueError as e:
                 st.error(str(e))
+
+    elif tipo == "Carico Trifase":
+        st.subheader("Carico trifase equilibrato — potenze e forme d'onda")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            V_lin  = st.number_input("Tensione di linea V_L [V]:", value=400.0, min_value=1.0, key="tf_Vl")
+            f_hz   = st.number_input("Frequenza [Hz]:", value=50.0, min_value=1.0, key="tf_f")
+        with col2:
+            cos_tf = st.number_input("cos φ:", value=0.85, min_value=0.01, max_value=1.0, key="tf_cos")
+            tipo_carico = st.selectbox("Tipo carico:", ["Induttivo (ritardo)", "Capacitivo (anticipo)", "Resistivo puro"], key="tf_tipo")
+        with col3:
+            P_kW   = st.number_input("Potenza attiva P [kW]:", value=30.0, min_value=0.01, key="tf_P")
+            collegamento = st.selectbox("Collegamento:", ["Stella (Y)", "Triangolo (Δ)"], key="tf_coll")
+
+        if st.button("Calcola e traccia", key="tf_btn"):
+            phi = math.acos(cos_tf)
+            if tipo_carico == "Capacitivo (anticipo)":
+                phi = -phi
+            elif tipo_carico == "Resistivo puro":
+                phi = 0.0
+
+            sin_phi = math.sin(phi)
+            P_W  = P_kW * 1000.0
+            S_VA = P_W / cos_tf
+            Q_VAR = S_VA * abs(sin_phi) * (1 if phi > 0 else -1 if phi < 0 else 0)
+            I_L  = S_VA / (math.sqrt(3) * V_lin)
+            V_fase = V_lin / math.sqrt(3)
+            I_fase = I_L if "Stella" in collegamento else I_L / math.sqrt(3)
+            V_picco = V_fase * math.sqrt(2)
+            I_picco = I_fase * math.sqrt(2)
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Potenza attiva P", f"{P_kW:.3f} kW")
+                st.metric("Potenza reattiva Q", f"{Q_VAR/1000:.3f} kVAR")
+            with col2:
+                st.metric("Potenza apparente S", f"{S_VA/1000:.3f} kVA")
+                st.metric("Corrente di linea I_L", f"{I_L:.3f} A")
+            with col3:
+                st.metric("Tensione di fase V_f", f"{V_fase:.2f} V")
+                st.metric("cos φ / sfasamento φ", f"{cos_tf:.3f} / {math.degrees(phi):.1f}°")
+
+            _barra_utilizzo(abs(phi) / (math.pi / 2) * 100, "Angolo di sfasamento (0 % = puro resistivo, 100 % = φ=90°)")
+
+            if _PLOTLY:
+                omega  = 2 * math.pi * f_hz
+                n_punti = 500
+                T_tot   = 2.0 / f_hz
+                t_arr   = [i * T_tot / n_punti for i in range(n_punti + 1)]
+
+                V_R = [V_picco * math.sin(omega * t)               for t in t_arr]
+                V_S = [V_picco * math.sin(omega * t - 2*math.pi/3) for t in t_arr]
+                V_T = [V_picco * math.sin(omega * t + 2*math.pi/3) for t in t_arr]
+                I_R = [I_picco * math.sin(omega * t - phi)               for t in t_arr]
+                I_S = [I_picco * math.sin(omega * t - phi - 2*math.pi/3) for t in t_arr]
+                I_T = [I_picco * math.sin(omega * t - phi + 2*math.pi/3) for t in t_arr]
+
+                t_ms = [ti * 1000 for ti in t_arr]
+
+                mostra_correnti = st.checkbox("Mostra anche correnti di fase", value=True, key="tf_showcurr")
+
+                fig_tf = go.Figure()
+
+                fig_tf.add_trace(go.Scatter(x=t_ms, y=V_R, name="V<sub>R</sub>",
+                    line=dict(color="#E53935", width=2.2)))
+                fig_tf.add_trace(go.Scatter(x=t_ms, y=V_S, name="V<sub>S</sub>",
+                    line=dict(color="#1E88E5", width=2.2)))
+                fig_tf.add_trace(go.Scatter(x=t_ms, y=V_T, name="V<sub>T</sub>",
+                    line=dict(color="#43A047", width=2.2)))
+
+                if mostra_correnti and abs(I_picco) > 0:
+                    fig_tf.add_trace(go.Scatter(x=t_ms, y=I_R, name="I<sub>R</sub>",
+                        line=dict(color="#E53935", width=1.4, dash="dash"),
+                        yaxis="y2"))
+                    fig_tf.add_trace(go.Scatter(x=t_ms, y=I_S, name="I<sub>S</sub>",
+                        line=dict(color="#1E88E5", width=1.4, dash="dash"),
+                        yaxis="y2"))
+                    fig_tf.add_trace(go.Scatter(x=t_ms, y=I_T, name="I<sub>T</sub>",
+                        line=dict(color="#43A047", width=1.4, dash="dash"),
+                        yaxis="y2"))
+
+                    fig_tf.update_layout(
+                        yaxis2=dict(
+                            title="Corrente [A]",
+                            overlaying="y", side="right",
+                            showgrid=False,
+                            zeroline=True, zerolinecolor="#ccc",
+                        )
+                    )
+
+                fig_tf.add_vline(x=1000/f_hz, line=dict(color="#aaa", dash="dot", width=1),
+                                 annotation_text=f"T = {1000/f_hz:.1f} ms", annotation_position="top right")
+
+                phi_label = f"φ = {abs(math.degrees(phi)):.1f}° {'(rit.)' if phi > 0 else '(ant.)' if phi < 0 else ''}"
+                if abs(phi) > 0.01:
+                    t_phi_ms = abs(phi) / omega * 1000
+                    fig_tf.add_annotation(
+                        x=t_phi_ms / 2, y=I_picco * 0.6,
+                        text=phi_label, showarrow=False,
+                        font=dict(size=11, color="#555"),
+                    )
+
+                fig_tf.update_layout(
+                    xaxis_title="Tempo [ms]",
+                    yaxis=dict(title="Tensione [V]", zeroline=True, zerolinecolor="#ccc"),
+                    legend=dict(orientation="h", y=-0.22, x=0),
+                    margin=dict(t=20, b=20, r=60),
+                    height=380,
+                    hovermode="x unified",
+                )
+                st.plotly_chart(fig_tf, use_container_width=True)
+                st.caption(f"Forme d'onda a regime — V_picco = {V_picco:.1f} V  |  I_picco = {I_picco:.2f} A  |  sequenza RST diretta")
 
     elif tipo == "Motore Asincrono — Dati di Targa":
         st.subheader("Grandezze elettromeccaniche da dati di targa")
