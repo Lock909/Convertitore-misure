@@ -136,22 +136,31 @@ def _barra_utilizzo(valore_pct: float, etichetta: str = "Utilizzo"):
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
+# Intercetta la navigazione dalle card Home PRIMA che il radio venga renderizzato.
+# I bottoni scrivono su "_nav_goto"; qui lo trasferiamo su "sidebar_cat" e lo puliamo.
+
+_SEZIONI = [
+    "🏠  Home",
+    "⚖️  Conversioni",
+    "⚡  Calcoli Elettrici",
+    "🤖  PLC e Automazione",
+    "〜  Vibrazioni",
+    "🔩  Meccanica",
+    "🔧  Pneumatica & Strumenti",
+    "🌡️  Termotecnica & Impianti",
+]
+
+if "_nav_goto" in st.session_state:
+    dest = st.session_state.pop("_nav_goto")
+    if dest in _SEZIONI:
+        st.session_state["sidebar_cat"] = dest
 
 with st.sidebar:
     st.markdown("## ⚙️ Tool Industriale")
     st.markdown("---")
     categoria = st.radio(
         "Sezione",
-        [
-            "🏠  Home",
-            "⚖️  Conversioni",
-            "⚡  Calcoli Elettrici",
-            "🤖  PLC e Automazione",
-            "〜  Vibrazioni",
-            "🔩  Meccanica",
-            "🔧  Pneumatica & Strumenti",
-            "🌡️  Termotecnica & Impianti",
-        ],
+        _SEZIONI,
         key="sidebar_cat",
         label_visibility="collapsed",
     )
@@ -200,7 +209,7 @@ if categoria == "🏠  Home":
                 unsafe_allow_html=True,
             )
             if st.button("Apri", key=f"home_btn_{i}", use_container_width=True):
-                st.session_state["sidebar_cat"] = nav_key
+                st.session_state["_nav_goto"] = nav_key
                 st.rerun()
     st.markdown("---")
     st.caption("CEI 64-8 · ISO 10816 · ISO 1940 · IEC 60751 · NIST ITS-90 · ISO 898-1 · EN 12464-1 · IEC 60034-30")
