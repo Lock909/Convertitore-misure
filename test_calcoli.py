@@ -15,6 +15,16 @@ import perdite_carico
 import motore_asincrono
 import bulloneria
 import illuminotecnica as il
+import trasformatore as trafo
+import circuito_rlc as rlc
+import armonie_thd as thd
+import batterie_ups as bat
+import isolamento_termico as iso_t
+import serbatoi
+import valvole_controllo as valvole
+import rumore_industriale as rumore
+import dissipatore as diss
+import nastri_trasportatori as nastri
 
 
 class TestAutomazione(unittest.TestCase):
@@ -472,6 +482,298 @@ class TestIlluminotecnica(unittest.TestCase):
     def test_requisiti_ambiente(self):
         r = il.requisiti_ambiente("Ufficio generale")
         self.assertEqual(r["Em_lux"], 500)
+
+
+class TestTrasformatore(unittest.TestCase):
+    def test_rapporto(self):
+        r = trafo.calcola_trasformatore(630, 10000, 400, 1350, 7600)
+        self.assertAlmostEqual(r["rapporto_a"], 10000/400, places=3)
+
+    def test_eta_nom(self):
+        r = trafo.calcola_trasformatore(630, 10000, 400, 1350, 7600)
+        self.assertGreater(r["eta_nom_pct"], 95.0)
+        self.assertLessEqual(r["eta_nom_pct"], 100.0)
+
+    def test_beta_opt(self):
+        r = trafo.calcola_trasformatore(630, 10000, 400, 1350, 7600)
+        self.assertAlmostEqual(r["beta_opt"], math.sqrt(1350/7600), places=4)
+
+    def test_icc(self):
+        r = trafo.calcola_trasformatore(100, 400, 230, 300, 1500, V_cc_pct=4.0, trifase=False)
+        self.assertGreater(r["I_cc_A"], 0)
+
+    def test_rendimento_vs_carico_length(self):
+        rv = trafo.rendimento_vs_carico(630, 1350, 7600, 0.85, 20)
+        self.assertEqual(len(rv["beta"]), 20)
+
+    def test_dV_pct_positive(self):
+        r = trafo.calcola_trasformatore(630, 10000, 400, 1350, 7600)
+        self.assertGreater(r["dV_pct"], 0)
+
+    def test_errore_tensioni_uguali(self):
+        with self.assertRaises(ValueError):
+            trafo.calcola_trasformatore(100, 0, 400, 300, 1500)
+
+
+class TestCircuitoRLC(unittest.TestCase):
+    def test_serie_risonanza(self):
+        r = rlc.risonanza_serie(0.1, 100e-6)
+        self.assertAlmostEqual(r["f0_Hz"], 1/(2*math.pi*math.sqrt(0.1*100e-6)), places=1)
+
+    def test_serie_induttivo(self):
+        # f=100 Hz, sopra risonanza (f0≈50 Hz con L=0.1, C=100e-6)
+        r = rlc.impedenza_serie(100, 0.1, 100e-6, 100)
+        self.assertEqual(r["tipo"], "Induttivo")
+
+    def test_serie_capacitivo(self):
+        # f=10 Hz, sotto risonanza -> Capacitivo
+        r = rlc.impedenza_serie(100, 0.1, 100e-6, 10)
+        self.assertEqual(r["tipo"], "Capacitivo")
+
+    def test_parallelo_keys(self):
+        r = rlc.impedenza_parallelo(1000, 0.1, 10e-6, 50)
+        self.assertIn("Z_ohm", r)
+        self.assertIn("phi_deg", r)
+
+    def test_risposta_freq_length(self):
+        r = rlc.risposta_frequenza(100, 0.1, 100e-6, 1, 10000, "serie", 50)
+        self.assertEqual(len(r["f_Hz"]), 51)
+
+    def test_risonanza_parallelo(self):
+        r = rlc.risonanza_parallelo(0.1, 100e-6)
+        self.assertAlmostEqual(r["f0_Hz"], 1/(2*math.pi*math.sqrt(0.1*100e-6)), places=1)
+
+
+class TestArmonieTHD(unittest.TestCase):
+    def test_thd_solo_fondamentale(self):
+        r = thd.calcola_thd(230, {3: 0.001})
+        self.assertAlmostEqual(r["THD_pct"], 0.001/230*100, delta=0.001)
+
+    def test_thd_terza(self):
+        r = thd.calcola_thd(100, {3: 10})
+        self.assertAlmostEqual(r["THD_pct"], 10.0, places=3)
+
+    def test_rms_totale(self):
+        r = thd.calcola_thd(100, {3: 10, 5: 5})
+        expected = math.sqrt(100**2 + 10**2 + 5**2)
+        self.assertAlmostEqual(r["rms_totale"], expected, places=3)
+
+    def test_giudizio_keys(self):
+        r = thd.calcola_thd(230, {3: 5})
+        self.assertIn("giudizio_ieee", r)
+
+    def test_forma_onda_length(self):
+        r = thd.forma_onda_armonica(230, {3: 10}, 50, 1, 100)
+        self.assertGreaterEqual(len(r["t_ms"]), 100)
+
+    def test_contributo_ordinato(self):
+        r = thd.calcola_thd(100, {3: 30, 5: 20})
+        self.assertIn(3, r["contributi"])
+        self.assertIn(5, r["contributi"])
+
+
+class TestBatterieUPS(unittest.TestCase):
+    def test_autonomia(self):
+        r = bat.calcola_autonomia(100, 48, 2000, 0.92, 0.80)
+        self.assertGreater(r["t_autonomia_h"], 0)
+
+    def test_autonomia_formula(self):
+        r = bat.calcola_autonomia(100, 48, 100*48*0.80*0.92, 0.92, 0.80)
+        self.assertAlmostEqual(r["t_autonomia_h"], 1.0, places=2)
+
+    def test_dimensionamento(self):
+        r = bat.dimensiona_banco(3000, 1.0, 48, 0.92, 0.80)
+        self.assertGreater(r["C_nominale_Ah"], 0)
+
+    def test_corrente_carica(self):
+        r = bat.corrente_carica(100)
+        self.assertAlmostEqual(r["I_C1_A"], 100.0, places=3)
+        self.assertAlmostEqual(r["I_C10_A"], 10.0, places=3)
+
+    def test_correzione_temperatura(self):
+        r = bat.correzione_temperatura(100, 0, "piombo")
+        self.assertLess(r["C_corretta_Ah"], 100)
+
+    def test_tipo_sconosciuto_fallback(self):
+        # Tipo non valido usa fallback (nessun errore, usa coeff Pb-acido)
+        r = bat.correzione_temperatura(100, 25, "uranio")
+        self.assertIn("C_corretta_Ah", r)
+        self.assertEqual(r["C_corretta_Ah"], 100.0)
+
+
+class TestIsolamentoTermico(unittest.TestCase):
+    def _strato(self):
+        return [{"nome": "Polistirene", "spessore_m": 0.10, "lambda_W_mK": 0.036}]
+
+    def test_perdita_parete(self):
+        r = iso_t.perdita_parete_piana(20, -5, self._strato(), 0.13, 0.04)
+        self.assertGreater(r["U_W_m2K"], 0)
+        self.assertLess(r["U_W_m2K"], 2.0)
+
+    def test_U_doppio_strato(self):
+        strati = [
+            {"nome": "Mattone", "spessore_m": 0.20, "lambda_W_mK": 0.72},
+            {"nome": "Polistirene", "spessore_m": 0.10, "lambda_W_mK": 0.036},
+        ]
+        r = iso_t.perdita_parete_piana(20, -5, strati, 0.13, 0.04)
+        self.assertLess(r["U_W_m2K"], 0.4)
+
+    def test_perdita_tubo(self):
+        strati = [{"nome": "Lana di roccia", "spessore_m": 0.05, "lambda_W_mK": 0.040}]
+        r = iso_t.perdita_tubo_cilindrico(80, 20, 100, strati, 10.0, 0.05, 0.04)
+        self.assertGreater(r["Q_W"], 0)
+
+    def test_temperatura_rugiada(self):
+        T_rug = iso_t.temperatura_rugiada(20, 50)
+        self.assertAlmostEqual(T_rug, 9.27, delta=0.5)
+
+    def test_verifica_condensa(self):
+        r = iso_t.verifica_condensa(5.0, 20.0, 80.0)
+        self.assertTrue(r["rischio_condensa"])
+
+    def test_no_condensa(self):
+        r = iso_t.verifica_condensa(18.0, 20.0, 50.0)
+        self.assertFalse(r["rischio_condensa"])
+
+
+class TestSerbatoi(unittest.TestCase):
+    def test_volume_cilindro(self):
+        r = serbatoi.volume_geometrico("cilindro_vert", D_m=1.0, H_m=2.0)
+        self.assertAlmostEqual(r, math.pi/4 * 1.0**2 * 2.0, places=5)
+
+    def test_volume_sfera(self):
+        r = serbatoi.volume_geometrico("sfera", D_m=1.0)
+        self.assertAlmostEqual(r, math.pi/6, places=5)
+
+    def test_pressione_fondo(self):
+        r = serbatoi.pressione_fondo(10.0)
+        self.assertAlmostEqual(r["P_mca"], 10.0, places=3)
+
+    def test_portata_torricelli(self):
+        r = serbatoi.portata_torricelli(1.0, 50.0)
+        self.assertGreater(r["Q_m3h"], 0)
+
+    def test_tempo_svuotamento(self):
+        r = serbatoi.tempo_svuotamento(1.0, 2.0, 50.0, 0.62, math.pi/4*1**2)
+        self.assertGreater(r["t_svuotamento_s"], 0)
+
+    def test_tempo_riempimento(self):
+        r = serbatoi.tempo_riempimento(10.0, 5.0)
+        self.assertAlmostEqual(r["t_h"], 2.0, places=5)
+
+
+class TestValvoleControllo(unittest.TestCase):
+    def test_kv_liquido(self):
+        r = valvole.cv_liquido(10.0, 1.0)
+        self.assertAlmostEqual(r["Kv"], 10.0, places=3)
+
+    def test_cv_vs_kv(self):
+        r = valvole.cv_liquido(10.0, 1.0)
+        self.assertAlmostEqual(r["Cv"], r["Kv"]/0.865, places=4)
+
+    def test_kv_gas_non_choked(self):
+        # P2=4 > P_cr=P1/2=3 -> non choked
+        r = valvole.cv_gas(500, 6.0, 4.0, 293.15, 1.0)
+        self.assertGreater(r["Kv"], 0)
+        self.assertFalse(r["choked_flow"])
+
+    def test_choked_flow(self):
+        r = valvole.cv_gas(500, 6.0, 2.0, 293.15, 1.0)
+        self.assertTrue(r["choked_flow"])
+
+    def test_cavitazione_sigma(self):
+        r = valvole.verifica_cavitazione(6.0, 1.0, 0.5)
+        self.assertAlmostEqual(r["sigma"], (6.0 - 0.5)/(6.0 - 1.0), places=5)
+
+    def test_cavitazione_bassa(self):
+        r = valvole.verifica_cavitazione(10.0, 8.0, 0.023)
+        self.assertEqual(r["rischio"], "BASSA")
+
+
+class TestRumoreIndustriale(unittest.TestCase):
+    def test_somma_due_uguali(self):
+        r = rumore.somma_livelli_db([80.0, 80.0])
+        self.assertAlmostEqual(r["L_tot_dB"], 83.01, delta=0.02)
+
+    def test_somma_una_sorgente(self):
+        r = rumore.somma_livelli_db([90.0])
+        self.assertAlmostEqual(r["L_tot_dB"], 90.0, places=5)
+
+    def test_lex_8h_calcolo(self):
+        r = rumore.lex_8h([480], [87.0])
+        self.assertAlmostEqual(r["LEX_8h_dBA"], 87.0, places=3)
+
+    def test_lex_8h_dpi(self):
+        r = rumore.lex_8h([480], [90.0])
+        self.assertTrue(r["dpi_obbligo"])
+
+    def test_attenuazione_dpi(self):
+        r = rumore.attenuazione_dpi(30, 95.0)
+        self.assertAlmostEqual(r["L_eff_dBA"], 70.0, places=3)
+
+    def test_attenuazione_distanza_doppio(self):
+        r = rumore.attenuazione_distanza(90.0, 1.0, 2.0)
+        self.assertAlmostEqual(r["delta_dB"], 6.02, delta=0.02)
+
+
+class TestDissipatore(unittest.TestCase):
+    def test_tj_base(self):
+        r = diss.temperatura_giunzione(50, 25, 1.5, 0.5, 2.0)
+        self.assertAlmostEqual(r["Tj_C"], 25 + 50*(1.5+0.5+2.0), places=3)
+
+    def test_tj_senza_dissipatore(self):
+        r = diss.temperatura_giunzione(10, 25, 2.0, 0.3)
+        self.assertAlmostEqual(r["Tj_C"], 25 + 10*(2.0+0.3), places=3)
+
+    def test_rsa_necessario(self):
+        r = diss.rsa_necessario(50, 150, 40, 1.5, 0.5)
+        expected = (150-40)/50 - 1.5 - 0.5
+        self.assertAlmostEqual(r["R_sa_max_CW"], expected, places=5)
+
+    def test_potenza_max(self):
+        r = diss.potenza_max_dissipabile(150, 40, 1.5, 0.5, 2.0)
+        self.assertAlmostEqual(r["P_max_W"], (150-40)/(1.5+0.5+2.0), places=5)
+
+    def test_curva_derating_length(self):
+        r = diss.curva_derating(100, 150, 100, 20)
+        self.assertEqual(len(r["T_amb_C"]), 21)
+
+    def test_rsa_impossibile(self):
+        with self.assertRaises(ValueError):
+            diss.rsa_necessario(100, 50, 40, 2.0, 1.0)
+
+
+class TestNastriTrasportatori(unittest.TestCase):
+    def test_portata_massica_keys(self):
+        r = nastri.portata_massica(0.8, 1.5, 800)
+        self.assertIn("Q_m3h", r)
+        self.assertIn("Q_th", r)
+
+    def test_portata_positiva(self):
+        r = nastri.portata_massica(0.8, 1.5, 800)
+        self.assertGreater(r["Q_m3h"], 0)
+
+    def test_portata_inclinata_minore(self):
+        r0 = nastri.portata_massica(0.8, 1.5, 800, inclinazione_deg=0)
+        r15 = nastri.portata_massica(0.8, 1.5, 800, inclinazione_deg=15)
+        self.assertLess(r15["Q_th_eff"], r0["Q_th"])
+
+    def test_potenza_motore_keys(self):
+        r = nastri.potenza_motore(200, 50, 5, 0.85)
+        self.assertIn("P_motore_kW", r)
+        self.assertGreater(r["P_motore_kW"], 0)
+
+    def test_tensione_nastro(self):
+        r = nastri.tensione_nastro(15000, 1.5)
+        self.assertAlmostEqual(r["F_periferica_N"], 10000.0, places=0)
+
+    def test_angolo_secco(self):
+        r = nastri.angolo_max_inclinazione(800, "secco")
+        self.assertEqual(r["angolo_tipico_deg"], 18)
+
+    def test_input_non_valido(self):
+        with self.assertRaises(ValueError):
+            nastri.portata_massica(0, 1.5, 800)
 
 
 if __name__ == "__main__":

@@ -21,6 +21,16 @@ import perdite_carico
 import motore_asincrono
 import bulloneria
 import illuminotecnica
+import trasformatore as trafo
+import circuito_rlc as rlc
+import armonie_thd as thd
+import batterie_ups as bat
+import isolamento_termico as iso_t
+import serbatoi
+import valvole_controllo as valvole
+import rumore_industriale as rumore
+import dissipatore as diss
+import nastri_trasportatori as nastri
 from costanti import SEZIONI_COMMERCIALI, TENSIONE_MONOFASE, TENSIONE_TRIFASE
 
 
@@ -148,6 +158,7 @@ _SEZIONI = [
     "🔩  Meccanica",
     "🔧  Pneumatica & Strumenti",
     "🌡️  Termotecnica & Impianti",
+    "🔒  Sicurezza & Utilities",
 ]
 
 if "_nav_goto" in st.session_state:
@@ -193,6 +204,7 @@ if categoria == "🏠  Home":
         ("🔩", "Meccanica",            "🔩  Meccanica",               "Travi, pompe, bulloni, trasm.", "ISO 898-1"),
         ("🔧", "Pneumatica & Strum.",  "🔧  Pneumatica & Strumenti",  "Aria compressa, TC, Pt100",     "IEC 60751"),
         ("🌡️", "Termotecnica",         "🌡️  Termotecnica & Impianti", "Scambiatori, illuminotecnica",  "EN 12464-1"),
+        ("🔒", "Sicurezza & Utilities","🔒  Sicurezza & Utilities",   "Rumore, serbatoi, valvole, UPS","ISO 9612"),
     ]
 
     cols = st.columns(4)
@@ -321,7 +333,13 @@ elif categoria == "⚡  Calcoli Elettrici":
             "Caduta di Tensione",
             "Corrente di Cortocircuito (Icc)",
             "Dimensionamento Protezioni",
-            "Carico Trifase",
+            "Carico Trifase Equilibrato",
+            "Carico Trifase Non Equilibrato",
+            "Trasformatore",
+            "Circuito RLC",
+            "Armonie e THD",
+            "Batterie e UPS",
+            "Dissipatore Termico",
             "Motore Asincrono — Dati di Targa",
             "Motore Asincrono — Classi IE (Efficienza)",
         ],
@@ -537,7 +555,7 @@ elif categoria == "⚡  Calcoli Elettrici":
             except ValueError as e:
                 st.error(str(e))
 
-    elif tipo == "Carico Trifase":
+    elif tipo == "Carico Trifase Equilibrato":
         st.subheader("Carico trifase equilibrato — potenze e forme d'onda")
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -648,6 +666,455 @@ elif categoria == "⚡  Calcoli Elettrici":
                 )
                 st.plotly_chart(fig_tf, use_container_width=True)
                 st.caption(f"Forme d'onda a regime — V_picco = {V_picco:.1f} V  |  I_picco = {I_picco:.2f} A  |  sequenza RST diretta")
+
+    elif tipo == "Carico Trifase Non Equilibrato":
+        import cmath as _cm
+
+        st.subheader("Carico trifase non equilibrato — impedanze asimmetriche")
+        st.caption("Supporta stella con/senza neutro (teorema di Millman) e triangolo. Inserisci R e X per ogni fase.")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            V_lin_ne = st.number_input("Tensione di linea V_L [V]:", value=400.0, min_value=1.0, key="ne_Vl")
+            f_ne     = st.number_input("Frequenza [Hz]:", value=50.0, min_value=1.0, key="ne_f")
+        with col2:
+            coll_ne = st.selectbox(
+                "Collegamento:",
+                ["Stella con neutro (Y-N)", "Stella senza neutro (Y)", "Triangolo (Δ)"],
+                key="ne_coll",
+            )
+
+        delta = "Triangolo" in coll_ne
+        if delta:
+            ph_labels = ["Ramo RS", "Ramo ST", "Ramo TR"]
+            help_txt  = "Inserisci l'impedanza di ciascun ramo del triangolo."
+        else:
+            ph_labels = ["Fase R", "Fase S", "Fase T"]
+            help_txt  = "Inserisci l'impedanza di ciascuna fase (tra filo e neutro)."
+        st.caption(help_txt)
+
+        cols3 = st.columns(3)
+        _COLORS = ["#E53935", "#1E88E5", "#43A047"]
+        Z_list = []
+        for i, (lbl, col3) in enumerate(zip(ph_labels, cols3)):
+            with col3:
+                st.markdown(f"<span style='color:{_COLORS[i]};font-weight:700'>{lbl}</span>", unsafe_allow_html=True)
+                R_ph = st.number_input(f"R [Ω]", value=10.0 + i * 5.0, min_value=0.0, key=f"ne_R{i}")
+                X_ph = st.number_input(f"X [Ω]  (+ind / −cap)", value=float(i * 4), key=f"ne_X{i}")
+            Z_list.append(complex(R_ph, X_ph))
+
+        if st.button("Calcola", key="ne_btn"):
+            try:
+                V_fase = V_lin_ne / math.sqrt(3)
+                omega  = 2 * math.pi * f_ne
+                ang120 = 2 * math.pi / 3
+
+                # Fasori tensione di fase (riferimento V_R a 0°)
+                V_R_ph = complex(V_fase, 0)
+                V_S_ph = V_fase * _cm.rect(1, -ang120)
+                V_T_ph = V_fase * _cm.rect(1,  ang120)
+
+                if delta:
+                    # ── Triangolo ─────────────────────────────────────────────
+                    # Tensioni di linea: V_RS = V_R - V_S, ecc.
+                    V_RS = V_R_ph - V_S_ph
+                    V_ST = V_S_ph - V_T_ph
+                    V_TR = V_T_ph - V_R_ph
+                    Z_RS, Z_ST, Z_TR = Z_list
+                    if abs(Z_RS) == 0 or abs(Z_ST) == 0 or abs(Z_TR) == 0:
+                        raise ValueError("Impedanza nulla: cortocircuito.")
+                    I_RS = V_RS / Z_RS
+                    I_ST = V_ST / Z_ST
+                    I_TR = V_TR / Z_TR
+                    # Correnti di linea (KCL ai nodi)
+                    I_R = I_RS - I_TR
+                    I_S = I_ST - I_RS
+                    I_T = I_TR - I_ST
+                    I_N = None
+                    # Potenze per ramo
+                    fase_data = [
+                        ("RS", Z_RS, I_RS, V_RS),
+                        ("ST", Z_ST, I_ST, V_ST),
+                        ("TR", Z_TR, I_TR, V_TR),
+                    ]
+                    # Tensioni su cui plottare waveform → linee
+                    V_wave = [V_RS, V_ST, V_TR]
+                    I_wave = [I_R, I_S, I_T]
+                    V_labels = ["V_RS", "V_ST", "V_TR"]
+                    I_labels = ["I_R", "I_S", "I_T"]
+
+                else:
+                    # ── Stella ────────────────────────────────────────────────
+                    Z_R_ph, Z_S_ph, Z_T_ph = Z_list
+                    if abs(Z_R_ph) == 0 or abs(Z_S_ph) == 0 or abs(Z_T_ph) == 0:
+                        raise ValueError("Impedanza nulla: cortocircuito.")
+
+                    if "con neutro" in coll_ne:
+                        # Ogni fase indipendente
+                        I_R = V_R_ph / Z_R_ph
+                        I_S = V_S_ph / Z_S_ph
+                        I_T = V_T_ph / Z_T_ph
+                        I_N = -(I_R + I_S + I_T)
+                        V_N0 = complex(0, 0)
+                    else:
+                        # Teorema di Millman: V_N0 = (V_R·Y_R + V_S·Y_S + V_T·Y_T) / (Y_R+Y_S+Y_T)
+                        Y_R = 1 / Z_R_ph
+                        Y_S = 1 / Z_S_ph
+                        Y_T = 1 / Z_T_ph
+                        V_N0 = (V_R_ph * Y_R + V_S_ph * Y_S + V_T_ph * Y_T) / (Y_R + Y_S + Y_T)
+                        I_R  = (V_R_ph - V_N0) / Z_R_ph
+                        I_S  = (V_S_ph - V_N0) / Z_S_ph
+                        I_T  = (V_T_ph - V_N0) / Z_T_ph
+                        I_N  = None
+                    fase_data = [
+                        ("R", Z_R_ph, I_R, V_R_ph - V_N0),
+                        ("S", Z_S_ph, I_S, V_S_ph - V_N0),
+                        ("T", Z_T_ph, I_T, V_T_ph - V_N0),
+                    ]
+                    V_wave  = [V_R_ph, V_S_ph, V_T_ph]
+                    I_wave  = [I_R, I_S, I_T]
+                    V_labels = ["V_R", "V_S", "V_T"]
+                    I_labels = ["I_R", "I_S", "I_T"]
+
+                # ── Risultati tabellari ────────────────────────────────────────
+                P_tot = Q_tot = S_tot = 0.0
+                rows = []
+                for lbl, Z_ph, I_ph, V_ph_eff in fase_data:
+                    I_mag = abs(I_ph)
+                    V_mag = abs(V_ph_eff)
+                    phi_f = _cm.phase(I_ph) - _cm.phase(V_ph_eff)
+                    P_f   = V_mag * I_mag * math.cos(phi_f)
+                    Q_f   = V_mag * I_mag * math.sin(phi_f)
+                    S_f   = V_mag * I_mag
+                    P_tot += P_f; Q_tot += Q_f; S_tot += S_f
+                    rows.append({
+                        "Fase": lbl,
+                        "Z [Ω]": f"{abs(Z_ph):.3f} ∠{math.degrees(_cm.phase(Z_ph)):.1f}°",
+                        "I [A]": f"{I_mag:.4f} ∠{math.degrees(_cm.phase(I_ph)):.1f}°",
+                        "P [W]": f"{P_f:.2f}",
+                        "Q [VAR]": f"{Q_f:.2f}",
+                        "cos φ": f"{math.cos(phi_f):.4f}",
+                    })
+
+                import pandas as _pd
+                st.dataframe(_pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+                col1, col2, col3 = st.columns(3)
+                col1.metric("P totale",  f"{P_tot/1000:.3f} kW")
+                col2.metric("Q totale",  f"{Q_tot/1000:.3f} kVAR")
+                col3.metric("S totale",  f"{S_tot/1000:.3f} kVA")
+
+                if "senza neutro" in coll_ne:
+                    st.info(f"Spostamento nodo neutro V_N0 = {abs(V_N0):.3f} V ∠{math.degrees(_cm.phase(V_N0)):.1f}°"
+                            + (" (sistema equilibrato se = 0 V)" if abs(V_N0) < 0.01 else ""))
+
+                if I_N is not None:
+                    st.info(f"Corrente di neutro I_N = {abs(I_N):.4f} A ∠{math.degrees(_cm.phase(I_N)):.1f}°")
+
+                if _PLOTLY:
+                    # ── Diagramma fasori ──────────────────────────────────────
+                    fig_fas = go.Figure()
+                    scale_I = abs(V_R_ph) / max(abs(I_R), abs(I_S), abs(I_T), 1e-9) * 0.6
+
+                    for (ph_lbl, V_ph, I_ph_f, col_c) in zip(
+                        V_labels, V_wave, I_wave, _COLORS
+                    ):
+                        # Fasore tensione
+                        fig_fas.add_trace(go.Scatter(
+                            x=[0, V_ph.real], y=[0, V_ph.imag],
+                            mode="lines+markers",
+                            line=dict(color=col_c, width=2.5),
+                            marker=dict(size=[0, 8], symbol=["circle", "arrow-bar-up"],
+                                        angleref="previous"),
+                            name=ph_lbl, legendgroup=ph_lbl,
+                        ))
+                        # Fasore corrente (scalata per visibilità)
+                        I_sc = I_ph_f * scale_I
+                        fig_fas.add_trace(go.Scatter(
+                            x=[0, I_sc.real], y=[0, I_sc.imag],
+                            mode="lines+markers",
+                            line=dict(color=col_c, width=1.5, dash="dash"),
+                            marker=dict(size=[0, 7]),
+                            name=I_labels[V_labels.index(ph_lbl)] + f" (×{scale_I:.1f})",
+                            legendgroup=ph_lbl,
+                        ))
+
+                    lim = abs(V_R_ph) * 1.15
+                    fig_fas.update_layout(
+                        xaxis=dict(range=[-lim, lim], scaleanchor="y", zeroline=True, zerolinecolor="#ccc"),
+                        yaxis=dict(range=[-lim, lim], zeroline=True, zerolinecolor="#ccc"),
+                        margin=dict(t=10, b=10), height=380,
+                        legend=dict(orientation="h", y=-0.15),
+                        title=dict(text="Diagramma fasori (tensioni piene, correnti tratteggiate e scalate)", font=dict(size=12)),
+                    )
+                    st.plotly_chart(fig_fas, use_container_width=True)
+
+                    # ── Forme d'onda ──────────────────────────────────────────
+                    n_punti = 600
+                    T_tot_w = 2.0 / f_ne
+                    t_arr   = [i * T_tot_w / n_punti for i in range(n_punti + 1)]
+                    t_ms    = [ti * 1000 for ti in t_arr]
+
+                    fig_wave = go.Figure()
+                    for ph_lbl, V_ph, I_ph_f, col_c, I_lbl in zip(
+                        V_labels, V_wave, I_wave, _COLORS, I_labels
+                    ):
+                        V_mag_w = abs(V_ph) * math.sqrt(2)
+                        V_ang_w = _cm.phase(V_ph)
+                        v_waveform = [V_mag_w * math.sin(omega * t + V_ang_w) for t in t_arr]
+                        fig_wave.add_trace(go.Scatter(
+                            x=t_ms, y=v_waveform, name=ph_lbl,
+                            line=dict(color=col_c, width=2.2),
+                        ))
+                        I_mag_w = abs(I_ph_f) * math.sqrt(2)
+                        I_ang_w = _cm.phase(I_ph_f)
+                        i_waveform = [I_mag_w * math.sin(omega * t + I_ang_w) for t in t_arr]
+                        fig_wave.add_trace(go.Scatter(
+                            x=t_ms, y=i_waveform, name=I_lbl,
+                            line=dict(color=col_c, width=1.4, dash="dash"),
+                            yaxis="y2",
+                        ))
+
+                    fig_wave.update_layout(
+                        xaxis_title="Tempo [ms]",
+                        yaxis=dict(title="Tensione [V]", zeroline=True, zerolinecolor="#ccc"),
+                        yaxis2=dict(title="Corrente [A]", overlaying="y", side="right",
+                                    showgrid=False, zeroline=True, zerolinecolor="#eee"),
+                        legend=dict(orientation="h", y=-0.22),
+                        margin=dict(t=20, b=20, r=60), height=400,
+                        hovermode="x unified",
+                    )
+                    st.plotly_chart(fig_wave, use_container_width=True)
+                    st.caption("Linee continue = tensioni  |  Linee tratteggiate = correnti (asse destro)  |  Asimmetria visibile nelle ampiezze")
+
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
+    elif tipo == "Trasformatore":
+        st.subheader("Calcolo Trasformatore (IEC 60076)")
+        col1, col2 = st.columns(2)
+        with col1:
+            S_kVA   = st.number_input("Potenza apparente S [kVA]:", value=630.0, min_value=1.0, key="tr_S")
+            V1_V    = st.number_input("Tensione primario V1 [V]:", value=10000.0, min_value=1.0, key="tr_V1")
+            V2_V    = st.number_input("Tensione secondario V2 [V]:", value=400.0, min_value=1.0, key="tr_V2")
+            trifase = st.checkbox("Trifase", value=True, key="tr_3f")
+        with col2:
+            P_ferro_W = st.number_input("Perdite a vuoto P_Fe [W]:", value=1350.0, min_value=1.0, key="tr_pfe")
+            P_rame_W  = st.number_input("Perdite a pieno carico P_Cu [W]:", value=7600.0, min_value=1.0, key="tr_pcu")
+            V_cc_pct  = st.number_input("Tensione di cc V_cc [%]:", value=4.0, min_value=0.1, max_value=20.0, key="tr_vcc")
+            cos_phi   = st.number_input("cos phi carico:", value=0.85, min_value=0.1, max_value=1.0, key="tr_cphi")
+        if st.button("Calcola Trasformatore", key="tr_btn"):
+            try:
+                r = trafo.calcola_trasformatore(S_kVA, V1_V, V2_V, P_ferro_W, P_rame_W, V_cc_pct, 2.0, cos_phi, trifase)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Rapporto di trasf.", f"{r['rapporto_a']:.4f}")
+                c1.metric("I1 nominale", f"{r['I1_nom_A']:.2f} A")
+                c1.metric("I2 nominale", f"{r['I2_nom_A']:.2f} A")
+                c2.metric("Rendimento nom.", f"{r['eta_nom_pct']:.2f} %")
+                c2.metric("Rendimento max.", f"{r['eta_max_pct']:.2f} %")
+                c2.metric("β ottimale", f"{r['beta_opt']:.3f}")
+                c3.metric("Icc", f"{r['I_cc_A']:.1f} A")
+                c3.metric("Caduta tensione ΔV%", f"{r['dV_pct']:.2f} %")
+                c3.metric("Z_cc [%]", f"{V_cc_pct:.1f} %")
+                st.markdown("**Parametri circuito equivalente**")
+                st.markdown(f"R_eq = {r['R_eq_ohm']:.4f} Ω &nbsp;|&nbsp; X_eq = {r['X_eq_ohm']:.4f} Ω &nbsp;|&nbsp; R_cc% = {r['R_cc_pct']:.3f}% &nbsp;|&nbsp; X_cc% = {r['X_cc_pct']:.3f}%")
+                if _PLOTLY:
+                    rv = trafo.rendimento_vs_carico(S_kVA, P_ferro_W, P_rame_W, cos_phi)
+                    fig_tr = go.Figure()
+                    fig_tr.add_trace(go.Scatter(x=rv["beta"], y=rv["eta_pct"], mode="lines", name="η vs β", line=dict(color="#2196F3", width=2)))
+                    fig_tr.add_vline(x=r["beta_opt"], line_dash="dash", line_color="#FF5722", annotation_text=f"β_opt={r['beta_opt']:.3f}")
+                    fig_tr.update_layout(title="Rendimento vs. Fattore di Carico", xaxis_title="β (fattore di carico)", yaxis_title="η [%]", height=320)
+                    st.plotly_chart(fig_tr, use_container_width=True)
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
+    elif tipo == "Circuito RLC":
+        st.subheader("Analisi Circuito RLC")
+        col1, col2 = st.columns(2)
+        with col1:
+            R_rlc = st.number_input("Resistenza R [Ω]:", value=100.0, min_value=0.0, key="rlc_R")
+            L_rlc = st.number_input("Induttanza L [mH]:", value=100.0, min_value=0.0, key="rlc_L")
+            C_rlc = st.number_input("Capacità C [μF]:", value=10.0, min_value=0.0, key="rlc_C")
+        with col2:
+            f_rlc = st.number_input("Frequenza f [Hz]:", value=50.0, min_value=0.1, key="rlc_f")
+            tipo_rlc = st.selectbox("Configurazione:", ["Serie", "Parallelo"], key="rlc_tipo")
+        if st.button("Calcola RLC", key="rlc_btn"):
+            try:
+                L_H = L_rlc / 1000.0
+                C_F = C_rlc / 1e6
+                if tipo_rlc == "Serie":
+                    r = rlc.impedenza_serie(R_rlc, L_H, C_F, f_rlc)
+                    st.success(f"Z = {abs(r['Z']):.3f} Ω  |  φ = {r['phi_deg']:.2f}°  |  cos φ = {r['cos_phi']:.4f}  |  Tipo: {r['tipo']}")
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("X_L", f"{r['X_L_ohm']:.3f} Ω")
+                    c1.metric("X_C", f"{r['X_C_ohm']:.3f} Ω")
+                    c2.metric("X_netto", f"{r['X_net_ohm']:.3f} Ω")
+                    c2.metric("|Z|", f"{abs(r['Z']):.3f} Ω")
+                    c3.metric("φ", f"{r['phi_deg']:.2f}°")
+                    c3.metric("cos φ", f"{r['cos_phi']:.4f}")
+                else:
+                    r = rlc.impedenza_parallelo(R_rlc, L_H, C_F, f_rlc)
+                    st.success(f"|Z| = {abs(r['Z']):.3f} Ω  |  φ = {r['phi_deg']:.2f}°  |  Tipo: {r['tipo']}")
+                    c1, c2 = st.columns(2)
+                    c1.metric("B_L", f"{r['B_L']:.5f} S")
+                    c1.metric("B_C", f"{r['B_C']:.5f} S")
+                    c2.metric("|Y|", f"{abs(r['Y']):.5f} S")
+                    c2.metric("φ", f"{r['phi_deg']:.2f}°")
+                r_ris = rlc.risonanza_serie(L_H, C_F, R_rlc)
+                st.info(f"Risonanza serie: f₀ = {r_ris['f0']:.2f} Hz  |  Q = {r_ris['Q']:.2f}  |  BW = {r_ris['BW']:.2f} Hz")
+                if _PLOTLY:
+                    resp = rlc.risposta_frequenza(R_rlc, L_H, C_F, max(1.0, f_rlc*0.01), f_rlc*20, tipo_rlc.lower(), 200)
+                    fig_rlc = go.Figure()
+                    fig_rlc.add_trace(go.Scatter(x=resp["f_Hz"], y=resp["Z_ohm"], mode="lines", name="|Z| [Ω]", line=dict(color="#2196F3")))
+                    fig_rlc.update_layout(title="Risposta in frequenza |Z|", xaxis_title="f [Hz]", yaxis_title="|Z| [Ω]", xaxis_type="log", height=300)
+                    st.plotly_chart(fig_rlc, use_container_width=True)
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
+    elif tipo == "Armonie e THD":
+        st.subheader("Analisi Armoniche e THD (IEC 61000-3-2)")
+        V1_thd = st.number_input("Fondamentale V₁ [Vrms]:", value=230.0, min_value=1.0, key="thd_v1")
+        st.markdown("**Inserisci ampiezza armoniche (0 = assente):**")
+        cols_thd = st.columns(6)
+        harm_vals = {}
+        for idx, ord_h in enumerate([2, 3, 4, 5, 6, 7, 9, 11, 13]):
+            with cols_thd[idx % 6]:
+                v_h = st.number_input(f"H{ord_h} [Vrms]", value=0.0 if ord_h % 2 == 0 else (V1_thd*0.3 if ord_h == 3 else V1_thd*0.1), min_value=0.0, key=f"thd_h{ord_h}")
+                if v_h > 0:
+                    harm_vals[ord_h] = v_h
+        if st.button("Calcola THD", key="thd_btn"):
+            try:
+                r = thd.calcola_thd(V1_thd, harm_vals)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("THD", f"{r['THD_pct']:.2f} %")
+                c2.metric("V_rms totale", f"{r['rms_totale']:.2f} V")
+                c3.metric("Giudizio IEEE", r['giudizio_ieee'])
+                if r["contributi"]:
+                    st.markdown("**Contributi per ordine:**")
+                    contrib_str = "  ".join([f"H{k}: {v:.1f}%" for k, v in sorted(r["contributi"].items())])
+                    st.text(contrib_str)
+                if _PLOTLY:
+                    onda = thd.forma_onda_armonica(V1_thd, harm_vals, 50.0, 2, 500)
+                    fig_thd = go.Figure()
+                    fig_thd.add_trace(go.Scatter(x=onda["t_ms"], y=onda["V_tot"], mode="lines", name="V totale", line=dict(color="#2196F3", width=2)))
+                    for ord_h, vals in onda["per_ordine"].items():
+                        fig_thd.add_trace(go.Scatter(x=onda["t_ms"], y=vals, mode="lines", name=f"H{ord_h}", line=dict(dash="dot"), opacity=0.6))
+                    fig_thd.update_layout(title="Forma d'onda con armoniche", xaxis_title="t [ms]", yaxis_title="V [V]", height=320)
+                    st.plotly_chart(fig_thd, use_container_width=True)
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
+    elif tipo == "Batterie e UPS":
+        st.subheader("Calcolo Batterie e UPS")
+        sub_bat = st.radio("Calcolo:", ["Autonomia batteria", "Dimensionamento banco", "Corrente di carica", "Correzione temperatura"], horizontal=True, key="bat_sub")
+        if sub_bat == "Autonomia batteria":
+            col1, col2 = st.columns(2)
+            with col1:
+                C_Ah    = st.number_input("Capacità nominale C [Ah]:", value=100.0, min_value=1.0, key="bat_C")
+                V_nom   = st.number_input("Tensione nominale V [V]:", value=48.0, min_value=1.0, key="bat_V")
+            with col2:
+                P_W     = st.number_input("Carico P [W]:", value=2000.0, min_value=1.0, key="bat_P")
+                eta_inv = st.number_input("η inverter:", value=0.92, min_value=0.5, max_value=1.0, key="bat_eta")
+                DOD     = st.number_input("DOD (profondità scarica):", value=0.80, min_value=0.1, max_value=1.0, key="bat_DOD")
+            if st.button("Calcola Autonomia", key="bat_btn1"):
+                try:
+                    r = bat.calcola_autonomia(C_Ah, V_nom, P_W, eta_inv, DOD)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Autonomia", f"{r['t_autonomia_h']:.2f} h  ({r['t_autonomia_min']:.0f} min)")
+                    c2.metric("Energia utile", f"{r['E_utile_Wh']:.0f} Wh")
+                    c3.metric("I scarica", f"{r['I_scarica_A']:.1f} A  (C-rate: {r['C_rate']:.2f})")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_bat == "Dimensionamento banco":
+            col1, col2 = st.columns(2)
+            with col1:
+                P_dim   = st.number_input("Carico P [W]:", value=3000.0, min_value=1.0, key="bat_dimP")
+                t_aut   = st.number_input("Autonomia richiesta [h]:", value=1.0, min_value=0.1, key="bat_dimt")
+            with col2:
+                V_ban   = st.number_input("Tensione banco [V]:", value=48.0, min_value=1.0, key="bat_dimV")
+                fa      = st.number_input("Fattore invecchiamento:", value=1.25, min_value=1.0, key="bat_dimfa")
+            if st.button("Dimensiona Banco", key="bat_btn2"):
+                try:
+                    r = bat.dimensiona_banco(P_dim, t_aut, V_ban, 0.92, 0.80, fa)
+                    c1, c2 = st.columns(2)
+                    c1.metric("C nominale richiesta", f"{r['C_nominale_Ah']:.0f} Ah")
+                    c2.metric("Energia richiesta", f"{r['E_richiesta_Wh']:.0f} Wh")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_bat == "Corrente di carica":
+            C_ch = st.number_input("Capacità C [Ah]:", value=100.0, min_value=1.0, key="bat_chC")
+            if st.button("Calcola Correnti", key="bat_btn3"):
+                r = bat.corrente_carica(C_ch)
+                st.markdown(f"**I_C1** = {r['I_C1_A']:.1f} A  |  **I_C5** = {r['I_C5_A']:.1f} A  |  **I_C10** = {r['I_C10_A']:.1f} A  |  **I_C20** = {r['I_C20_A']:.1f} A  |  **I_float** = {r['I_float_A']:.2f} A")
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                C_T  = st.number_input("Capacità C [Ah]:", value=100.0, min_value=1.0, key="bat_TC")
+                T_C  = st.number_input("Temperatura [°C]:", value=25.0, key="bat_Temp")
+            with col2:
+                tipo_bat = st.selectbox("Tipo batteria:", ["piombo", "Li-ion", "NiMH"], key="bat_tipo")
+            if st.button("Correggi per Temperatura", key="bat_btn4"):
+                try:
+                    r = bat.correzione_temperatura(C_T, T_C, tipo_bat)
+                    st.success(f"C corretta = {r['C_corretta_Ah']:.1f} Ah  (riduzione: {r['riduzione_pct']:.1f}%)")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+
+    elif tipo == "Dissipatore Termico":
+        st.subheader("Calcolo Dissipatore Termico (IEC 60747 / JEDEC)")
+        sub_diss = st.radio("Calcolo:", ["Temperatura giunzione", "R_sa necessario", "Curva di derating"], horizontal=True, key="diss_sub")
+        if sub_diss == "Temperatura giunzione":
+            col1, col2 = st.columns(2)
+            with col1:
+                P_diss  = st.number_input("Potenza dissipata P [W]:", value=50.0, min_value=0.0, key="diss_P")
+                T_amb_d = st.number_input("Temperatura ambiente [°C]:", value=25.0, key="diss_Tamb")
+                R_jc    = st.number_input("R_jc [°C/W]:", value=1.5, min_value=0.0, key="diss_Rjc")
+            with col2:
+                pasta_sel = st.selectbox("Pasta termica:", list(diss.PASTA_TERMICA.keys()), key="diss_pasta")
+                R_cs    = diss.PASTA_TERMICA[pasta_sel]
+                st.info(f"R_cs = {R_cs} °C/W")
+                R_sa    = st.number_input("R_sa dissipatore [°C/W]:", value=2.0, min_value=0.0, key="diss_Rsa")
+            if st.button("Calcola Tj", key="diss_btn1"):
+                try:
+                    r = diss.temperatura_giunzione(P_diss, T_amb_d, R_jc, R_cs, R_sa)
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("Tj [°C]", f"{r['Tj_C']:.1f}")
+                    c2.metric("T_case [°C]", f"{r['T_case_C']:.1f}")
+                    c3.metric("T_diss [°C]", f"{r['T_diss_C']:.1f}")
+                    c4.metric("R_tot [°C/W]", f"{r['R_tot_CW']:.3f}")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_diss == "R_sa necessario":
+            col1, col2 = st.columns(2)
+            with col1:
+                P_rsa   = st.number_input("Potenza P [W]:", value=50.0, min_value=0.1, key="rsa_P")
+                Tj_max  = st.number_input("Tj_max [°C]:", value=150.0, key="rsa_Tjmax")
+            with col2:
+                T_amb_r = st.number_input("T ambiente [°C]:", value=40.0, key="rsa_Tamb")
+                R_jc_r  = st.number_input("R_jc [°C/W]:", value=1.5, min_value=0.0, key="rsa_Rjc")
+            if st.button("Calcola R_sa", key="rsa_btn"):
+                try:
+                    r = diss.rsa_necessario(P_rsa, Tj_max, T_amb_r, R_jc_r)
+                    st.success(f"R_sa max = {r['R_sa_max_CW']:.3f} °C/W  (budget termico = {r['budget_CW']:.3f} °C/W)")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                P25     = st.number_input("P_max a 25°C [W]:", value=100.0, min_value=1.0, key="der_P25")
+                Tj_der  = st.number_input("Tj_max [°C]:", value=150.0, key="der_Tj")
+            with col2:
+                T_max_d = st.number_input("T_amb max asse X [°C]:", value=120.0, key="der_Tmax")
+            if _PLOTLY:
+                r = diss.curva_derating(P25, Tj_der, T_max_d)
+                fig_der = go.Figure()
+                fig_der.add_trace(go.Scatter(x=r["T_amb_C"], y=r["P_max_W"], mode="lines", fill="tozeroy", name="P_max", line=dict(color="#FF5722", width=2)))
+                fig_der.update_layout(title="Curva di Derating", xaxis_title="T ambiente [°C]", yaxis_title="P_max [W]", height=320)
+                st.plotly_chart(fig_der, use_container_width=True)
+            else:
+                if st.button("Calcola Derating", key="der_btn"):
+                    r = diss.curva_derating(P25, Tj_der, T_max_d)
+                    st.write({f"{t:.0f}°C": f"{p:.1f} W" for t, p in zip(r["T_amb_C"], r["P_max_W"])})
 
     elif tipo == "Motore Asincrono — Dati di Targa":
         st.subheader("Grandezze elettromeccaniche da dati di targa")
@@ -1105,6 +1572,7 @@ elif categoria == "🔩  Meccanica":
             "Bulloneria — Serraggio",
             "Bulloneria — Verifica",
             "Bulloneria — Flangia",
+            "Nastri Trasportatori",
         ],
         key="mec_tool",
     )
@@ -1519,6 +1987,76 @@ elif categoria == "🔩  Meccanica":
             except ValueError as e:
                 st.error(str(e))
 
+    elif tool_mec == "Nastri Trasportatori":
+        st.subheader("Nastri Trasportatori (ISO 5048 / DIN 22101)")
+        sub_nas = st.radio("Calcolo:", ["Portata e capacità", "Potenza motore", "Tensione nastro", "Angolo max inclinazione"], horizontal=True, key="nas_sub")
+        if sub_nas == "Portata e capacità":
+            col1, col2 = st.columns(2)
+            with col1:
+                B_nas   = st.number_input("Larghezza nastro B [m]:", value=0.8, min_value=0.1, key="nas_B")
+                v_nas   = st.number_input("Velocità v [m/s]:", value=1.5, min_value=0.1, key="nas_v")
+            with col2:
+                rho_nas = st.number_input("Densità apparente ρ [kg/m³]:", value=800.0, min_value=10.0, key="nas_rho")
+                ang_sur = st.number_input("Angolo surcharge [°]:", value=20.0, min_value=0.0, max_value=35.0, key="nas_sur")
+                incl_nas= st.number_input("Inclinazione nastro [°]:", value=0.0, min_value=0.0, max_value=30.0, key="nas_incl")
+            if st.button("Calcola Portata", key="nas_btn1"):
+                try:
+                    r = nastri.portata_massica(B_nas, v_nas, rho_nas, ang_sur, incl_nas)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Q [m³/h]", f"{r['Q_m3h']:.1f}")
+                    c2.metric("Q [t/h]", f"{r['Q_th']:.1f}")
+                    c3.metric("Q eff. [t/h]", f"{r['Q_th_eff']:.1f}")
+                    st.info(f"Sezione di carico A = {r['A_m2']:.4f} m²  |  Larghezza utile b_eff = {r['b_eff_m']:.3f} m")
+                except ValueError as e:
+                    st.error(str(e))
+        elif sub_nas == "Potenza motore":
+            col1, col2 = st.columns(2)
+            with col1:
+                Q_nas   = st.number_input("Portata Q [t/h]:", value=200.0, min_value=1.0, key="nas_Q")
+                L_nas   = st.number_input("Lunghezza orizzontale L [m]:", value=50.0, min_value=1.0, key="nas_L")
+                H_nas   = st.number_input("Dislivello H [m]:", value=0.0, key="nas_H")
+            with col2:
+                eta_nas = st.number_input("η trasmissione:", value=0.85, min_value=0.5, max_value=1.0, key="nas_eta")
+                f_att   = st.number_input("f attrito rulli:", value=0.022, min_value=0.010, max_value=0.050, key="nas_f")
+            if st.button("Calcola Potenza", key="nas_btn2"):
+                try:
+                    r = nastri.potenza_motore(Q_nas, L_nas, H_nas, eta_nas, f_att)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("P motore", f"{r['P_motore_kW']:.2f} kW")
+                    c2.metric("P utile", f"{r['P_utile_W']/1000:.2f} kW")
+                    c3.metric("P sollevamento", f"{r['P_sollevamento_W']/1000:.2f} kW")
+                    _barra_utilizzo(r["eta"] * 100, "Rendimento trasmissione")
+                except ValueError as e:
+                    st.error(str(e))
+        elif sub_nas == "Tensione nastro":
+            col1, col2 = st.columns(2)
+            with col1:
+                P_tens  = st.number_input("Potenza motore P [W]:", value=15000.0, min_value=1.0, key="nas_Ptens")
+                v_tens  = st.number_input("Velocità v [m/s]:", value=1.5, min_value=0.1, key="nas_vtens")
+            with col2:
+                D_pul   = st.number_input("Diametro puleggia D [mm] (0=ignora):", value=400.0, min_value=0.0, key="nas_Dpul")
+            if st.button("Calcola Tensione", key="nas_btn3"):
+                try:
+                    r = nastri.tensione_nastro(P_tens, v_tens, D_pul if D_pul > 0 else None)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("F periferica", f"{r['F_periferica_N']:.0f} N")
+                    c2.metric("T lato teso", f"{r['T_stretto_N']:.0f} N")
+                    c3.metric("T lato molle", f"{r['T_molle_N']:.0f} N")
+                    if "coppia_Nm" in r:
+                        st.info(f"Coppia su puleggia: {r['coppia_Nm']:.1f} N·m")
+                except ValueError as e:
+                    st.error(str(e))
+        else:
+            tipo_mat = st.selectbox("Tipo materiale:", ["secco", "umido", "granuloso", "polveri"], key="nas_tipomat")
+            rho_ang  = st.number_input("Densità apparente [kg/m³]:", value=800.0, key="nas_rhoang")
+            if st.button("Mostra Angoli", key="nas_btn4"):
+                try:
+                    r = nastri.angolo_max_inclinazione(rho_ang, tipo_mat)
+                    st.success(f"Angolo tipico: {r['angolo_tipico_deg']}°  |  Angolo max: {r['angolo_max_deg']}°")
+                    st.caption(r["note"])
+                except ValueError as e:
+                    st.error(str(e))
+
 
 elif categoria == "🔧  Pneumatica & Strumenti":
     _card_open("strum", "🔧 Pneumatica & Strumentazione", "IEC 60751 / NIST ITS-90")
@@ -1533,6 +2071,7 @@ elif categoria == "🔧  Pneumatica & Strumenti":
             "Termocoppia mV → °C (NIST)",
             "Pt100 — Temperatura ↔ Resistenza",
             "Errore di Misura e Incertezza",
+            "Valvola di Controllo Cv/Kv",
         ],
         key="strum_tool",
     )
@@ -1684,6 +2223,64 @@ elif categoria == "🔧  Pneumatica & Strumenti":
             except ValueError as e:
                 st.error(str(e))
 
+    elif tool_strum == "Valvola di Controllo Cv/Kv":
+        st.subheader("Dimensionamento Valvola di Controllo (IEC 60534)")
+        sub_val = st.radio("Tipo fluido:", ["Liquido", "Gas comprimibile", "Verifica cavitazione"], horizontal=True, key="val_sub")
+        if sub_val == "Liquido":
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                Q_val   = st.number_input("Portata Q [m³/h]:", value=10.0, min_value=0.01, key="val_Q")
+            with col2:
+                dP_val  = st.number_input("ΔP [bar]:", value=1.0, min_value=0.01, key="val_dP")
+            with col3:
+                SG_val  = st.number_input("Densità relativa SG:", value=1.0, min_value=0.1, key="val_SG")
+            if st.button("Calcola Kv / Cv", key="val_btn1"):
+                try:
+                    r = valvole.cv_liquido(Q_val, dP_val, SG_val)
+                    c1, c2 = st.columns(2)
+                    c1.metric("Kv [m³/h/√bar]", f"{r['Kv']:.3f}")
+                    c2.metric("Cv [US gpm/√psi]", f"{r['Cv']:.3f}")
+                    st.caption("Caratteristiche: " + "  |  ".join([f"**{k}**: {v}" for k, v in valvole.CARATTERISTICHE.items()]))
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_val == "Gas comprimibile":
+            col1, col2 = st.columns(2)
+            with col1:
+                Q_gas   = st.number_input("Portata Q [Nm³/h]:", value=500.0, min_value=0.1, key="val_Qgas")
+                P1_gas  = st.number_input("P1 a monte [bar a]:", value=6.0, min_value=0.1, key="val_P1gas")
+                P2_gas  = st.number_input("P2 a valle [bar a]:", value=3.0, min_value=0.01, key="val_P2gas")
+            with col2:
+                T_gas   = st.number_input("Temperatura T [°C]:", value=20.0, key="val_Tgas")
+                SG_gas  = st.number_input("Densità relativa gas / aria:", value=1.0, min_value=0.1, key="val_SGgas")
+            if st.button("Calcola Kv gas", key="val_btn2"):
+                try:
+                    r = valvole.cv_gas(Q_gas, P1_gas, P2_gas, T_gas + 273.15, SG_gas)
+                    c1, c2 = st.columns(2)
+                    c1.metric("Kv", f"{r['Kv']:.3f}")
+                    c2.metric("Cv", f"{r['Cv']:.3f}")
+                    if r["choked_flow"]:
+                        st.warning(f"Flusso bloccato (choked flow)! P_critica = {r['P_critica_bar_a']:.2f} bar a  — ΔP effettivo = {r['dP_effettivo_bar']:.2f} bar")
+                    else:
+                        st.info(f"Flusso non bloccato  |  ΔP effettivo = {r['dP_effettivo_bar']:.2f} bar")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        else:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                P1_cav  = st.number_input("P1 a monte [bar a]:", value=6.0, min_value=0.1, key="val_P1cav")
+            with col2:
+                P2_cav  = st.number_input("P2 a valle [bar a]:", value=2.0, min_value=0.01, key="val_P2cav")
+            with col3:
+                Pvap    = st.number_input("P vapore liquido [bar a]:", value=0.023, min_value=0.001, key="val_Pvap")
+            if st.button("Verifica cavitazione", key="val_btn3"):
+                try:
+                    r = valvole.verifica_cavitazione(P1_cav, P2_cav, Pvap)
+                    colore = {"BASSA": "success", "MEDIA": "warning", "ALTA": "error"}[r["rischio"]]
+                    getattr(st, colore)(f"Rischio cavitazione: {r['rischio']}  |  σ = {r['sigma']:.3f}  |  σ_crit = {r['sigma_crit']:.3f}")
+                    st.info(f"ΔP = {r['dP_bar']:.2f} bar  |  FL = {r['FL']:.2f}")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+
 
 elif categoria == "🌡️  Termotecnica & Impianti":
     _card_open("termo", "🌡️ Termotecnica & Impianti", "EN 12464-1 / ISO 15547")
@@ -1697,6 +2294,10 @@ elif categoria == "🌡️  Termotecnica & Impianti":
             "Illuminotecnica — Indice Locale",
             "Illuminotecnica — Fattore di Manutenzione MF",
             "Illuminotecnica — Potenza e LENI",
+            "Isolamento Termico — Parete Piana",
+            "Isolamento Termico — Tubo Cilindrico",
+            "Serbatoi — Volume e Pressione",
+            "Serbatoi — Svuotamento (Torricelli)",
         ],
         key="termo_tool",
     )
@@ -1871,6 +2472,246 @@ elif categoria == "🌡️  Termotecnica & Impianti":
                 else:
                     st.success("LENI ottimo — tipico di impianti LED moderni.")
             except ValueError as e:
+                st.error(str(e))
+
+    elif tool_termo == "Isolamento Termico — Parete Piana":
+        st.subheader("Isolamento Termico Parete Piana (EN ISO 6946)")
+        col1, col2 = st.columns(2)
+        with col1:
+            T_int_iso = st.number_input("T interna [°C]:", value=20.0, key="iso_Tint")
+            T_est_iso = st.number_input("T esterna [°C]:", value=-5.0, key="iso_Test")
+        with col2:
+            R_si = st.number_input("R_si [m²K/W]:", value=0.13, min_value=0.01, key="iso_Rsi")
+            R_se = st.number_input("R_se [m²K/W]:", value=0.04, min_value=0.01, key="iso_Rse")
+        st.markdown("**Strati della parete (da interno a esterno):**")
+        n_strati = st.number_input("Numero strati:", min_value=1, max_value=8, value=3, step=1, key="iso_nstr")
+        mat_list = list(iso_t.MATERIALI_LAMBDA.keys())
+        strati_list = []
+        for i in range(int(n_strati)):
+            c1, c2, c3 = st.columns([2, 1, 1])
+            with c1:
+                mat_sel = st.selectbox(f"Materiale strato {i+1}:", mat_list, key=f"iso_mat{i}")
+            with c2:
+                lambda_default = iso_t.MATERIALI_LAMBDA[mat_sel]
+                lam = st.number_input(f"λ [W/mK]:", value=lambda_default, min_value=0.001, key=f"iso_lam{i}")
+            with c3:
+                sp = st.number_input(f"Spessore [m]:", value=0.10, min_value=0.001, key=f"iso_sp{i}")
+            strati_list.append({"nome": mat_sel, "spessore_m": sp, "lambda_W_mK": lam})
+        if st.button("Calcola U e Perdita", key="iso_btn"):
+            try:
+                r = iso_t.perdita_parete_piana(T_int_iso, T_est_iso, strati_list, R_si, R_se)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("U [W/m²K]", f"{r['U_W_m2K']:.3f}")
+                c2.metric("q [W/m²]", f"{r['q_W_m2']:.1f}")
+                c3.metric("R_tot [m²K/W]", f"{r['R_tot_m2K_W']:.3f}")
+                T_ifaces = r.get("T_interfaces", [])
+                if T_ifaces:
+                    st.markdown("**Temperature alle interfacce:**")
+                    st.text("  →  ".join([f"{t:.1f}°C" for t in T_ifaces]))
+                T_rug = iso_t.temperatura_rugiada(T_int_iso, 60.0)
+                verif = iso_t.verifica_condensa(T_ifaces[0] if T_ifaces else T_int_iso, T_int_iso, 60.0)
+                if verif["rischio_condensa"]:
+                    st.warning(f"Rischio condensa! T_sup = {T_ifaces[0]:.1f}°C < T_rugiada = {verif['T_rugiada_C']:.1f}°C (a UR=60%)")
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
+    elif tool_termo == "Isolamento Termico — Tubo Cilindrico":
+        st.subheader("Isolamento Tubo Cilindrico (EN ISO 6946)")
+        col1, col2 = st.columns(2)
+        with col1:
+            T_fl    = st.number_input("T fluido interno [°C]:", value=80.0, key="isot_Tfl")
+            T_amb_t = st.number_input("T ambiente [°C]:", value=20.0, key="isot_Tamb")
+            D_int   = st.number_input("Diametro interno D_int [mm]:", value=100.0, min_value=5.0, key="isot_Di")
+        with col2:
+            L_tub   = st.number_input("Lunghezza tubo [m]:", value=10.0, min_value=0.1, key="isot_L")
+            sp_iso  = st.number_input("Spessore isolante [m]:", value=0.05, min_value=0.001, key="isot_sp")
+            mat_tub = st.selectbox("Materiale isolante:", list(iso_t.MATERIALI_LAMBDA.keys()), index=list(iso_t.MATERIALI_LAMBDA.keys()).index("Lana di roccia (100 kg/m³)") if "Lana di roccia (100 kg/m³)" in iso_t.MATERIALI_LAMBDA else 0, key="isot_mat")
+            lam_tub = iso_t.MATERIALI_LAMBDA[mat_tub]
+        if st.button("Calcola Perdita Tubo", key="isot_btn"):
+            try:
+                strati_tub = [{"nome": mat_tub, "spessore_m": sp_iso, "lambda_W_mK": lam_tub}]
+                r = iso_t.perdita_tubo_cilindrico(T_fl, T_amb_t, D_int, strati_tub, L_tub, 0.05, 0.04)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Q totale [W]", f"{r['Q_W']:.1f}")
+                c2.metric("q lineare [W/m]", f"{r['Q_W_m']:.2f}")
+                c3.metric("D esterno [mm]", f"{r['D_est_mm']:.1f}")
+                st.info(f"Resistenza lineare R_lin = {r['R_lin_KW']:.4f} K·m/W")
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
+    elif tool_termo == "Serbatoi — Volume e Pressione":
+        st.subheader("Serbatoi — Volume Geometrico e Pressione di Fondo")
+        sub_ser = st.radio("Forma:", ["Cilindro verticale", "Cilindro orizzontale", "Parallelepipedo", "Sfera", "Cono"], horizontal=True, key="ser_forma")
+        forma_map = {"Cilindro verticale": "cilindro_vert", "Cilindro orizzontale": "cilindro_oriz", "Parallelepipedo": "parallelepipedo", "Sfera": "sfera", "Cono": "cono"}
+        forma_key = forma_map[sub_ser]
+        col1, col2 = st.columns(2)
+        if forma_key == "cilindro_vert":
+            with col1: D_ser = st.number_input("Diametro [m]:", value=1.0, min_value=0.01, key="ser_D")
+            with col2: L_ser = st.number_input("Altezza [m]:", value=2.0, min_value=0.01, key="ser_L")
+            dims = {"D_m": D_ser, "H_m": L_ser}
+        elif forma_key == "cilindro_oriz":
+            with col1: D_ser = st.number_input("Diametro [m]:", value=1.0, min_value=0.01, key="ser_D")
+            with col2: L_ser = st.number_input("Lunghezza [m]:", value=2.0, min_value=0.01, key="ser_L")
+            dims = {"D_m": D_ser, "L_m": L_ser}
+        elif forma_key == "parallelepipedo":
+            with col1:
+                a_ser = st.number_input("Larghezza L [m]:", value=1.0, min_value=0.01, key="ser_a")
+                b_ser = st.number_input("Profondità W [m]:", value=1.0, min_value=0.01, key="ser_b")
+            with col2: h_ser = st.number_input("Altezza H [m]:", value=1.0, min_value=0.01, key="ser_h")
+            dims = {"L_m": a_ser, "W_m": b_ser, "H_m": h_ser}
+        elif forma_key == "sfera":
+            with col1: D_sfera = st.number_input("Diametro [m]:", value=1.0, min_value=0.01, key="ser_Dsf")
+            dims = {"D_m": D_sfera}
+        else:  # cono
+            with col1: D_cono = st.number_input("Diametro base [m]:", value=1.0, min_value=0.01, key="ser_Dco")
+            with col2: H_cono = st.number_input("Altezza [m]:", value=2.0, min_value=0.01, key="ser_Hco")
+            dims = {"D_m": D_cono, "H_m": H_cono}
+        H_liv  = st.number_input("Livello liquido H [m]:", value=1.5, min_value=0.01, key="ser_Hliq")
+        rho_ser = st.number_input("Densità liquido ρ [kg/m³]:", value=1000.0, min_value=100.0, key="ser_rho")
+        if st.button("Calcola", key="ser_btn1"):
+            try:
+                V_tot = serbatoi.volume_geometrico(forma_key, **dims)
+                pf    = serbatoi.pressione_fondo(H_liv, rho_ser)
+                tf    = serbatoi.tempo_riempimento(V_tot, 10.0)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Volume totale [m³]", f"{V_tot:.3f}")
+                c1.metric("Volume [L]", f"{V_tot*1000:.0f}")
+                c2.metric("Pressione fondo", f"{pf['P_bar']:.4f} bar")
+                c2.metric("Altezza equiv.", f"{pf['P_mca']:.2f} mca")
+                c3.metric("Riempimento (10 m³/h)", f"{tf['t_min']:.1f} min")
+                c3.metric("P fondo [kPa]", f"{pf['P_kPa']:.2f}")
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
+    elif tool_termo == "Serbatoi — Svuotamento (Torricelli)":
+        st.subheader("Svuotamento Serbatoio — Legge di Torricelli")
+        col1, col2 = st.columns(2)
+        with col1:
+            V_svu   = st.number_input("Volume liquido V [m³]:", value=5.0, min_value=0.01, key="svu_V")
+            H_svu   = st.number_input("Altezza colonna H [m]:", value=2.0, min_value=0.1, key="svu_H")
+            D_foro  = st.number_input("Diametro foro scarico D [mm]:", value=50.0, min_value=1.0, key="svu_Df")
+        with col2:
+            Cd_svu  = st.number_input("Coefficiente scarico Cd:", value=0.62, min_value=0.1, max_value=1.0, key="svu_Cd")
+            rho_svu = st.number_input("Densità ρ [kg/m³]:", value=1000.0, min_value=100.0, key="svu_rho")
+            A_serb  = st.number_input("Sezione serbatoio A [m²]:", value=V_svu / H_svu, min_value=0.01, key="svu_A")
+        col_q1, col_q2, col_q3 = st.columns(3)
+        q_tor = serbatoi.portata_torricelli(H_svu, D_foro, Cd_svu, rho_svu)
+        col_q1.metric("Velocità scarico v", f"{q_tor['v_ms']:.2f} m/s")
+        col_q2.metric("Portata iniziale", f"{q_tor['Q_lmin']:.1f} L/min")
+        col_q3.metric("Portata iniziale", f"{q_tor['Q_m3h']:.3f} m³/h")
+        if st.button("Calcola Tempo Svuotamento", key="svu_btn"):
+            try:
+                r = serbatoi.tempo_svuotamento(V_svu, H_svu, D_foro, Cd_svu, A_serb)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Tempo [s]", f"{r['t_svuotamento_s']:.0f}")
+                c2.metric("Tempo [min]", f"{r['t_svuotamento_min']:.1f}")
+                c3.metric("Tempo [h]", f"{r['t_svuotamento_h']:.3f}")
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
+
+elif categoria == "🔒  Sicurezza & Utilities":
+    _card_open("sic", "🔒 Sicurezza & Utilities", "ISO 9612 / D.Lgs 81/2008")
+    tool_sic = st.selectbox(
+        "Seleziona Strumento:",
+        [
+            "Rumore — Somma Sorgenti",
+            "Rumore — LEX,8h Esposizione",
+            "Rumore — Verifica DPI (SNR)",
+            "Rumore — Attenuazione per Distanza",
+        ],
+        key="sic_tool",
+    )
+
+    if tool_sic == "Rumore — Somma Sorgenti":
+        st.subheader("Somma Energetica Sorgenti Sonore (ISO 9612)")
+        n_sorg = st.number_input("Numero sorgenti:", min_value=1, max_value=10, value=3, step=1, key="rum_n")
+        livelli = []
+        cols_rum = st.columns(int(n_sorg))
+        for i in range(int(n_sorg)):
+            with cols_rum[i]:
+                lv = st.number_input(f"L{i+1} [dB]", value=85.0 - i*3, min_value=0.0, max_value=150.0, key=f"rum_l{i}")
+                livelli.append(lv)
+        if st.button("Calcola Livello Totale", key="rum_btn1"):
+            try:
+                r = rumore.somma_livelli_db(livelli)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("L_tot", f"{r['L_tot_dB']:.1f} dB")
+                c2.metric("L_max sorgente", f"{r['L_max_dB']:.1f} dB")
+                c3.metric("Incremento", f"+{r['incremento_dB']:.1f} dB")
+                st.info(f"Somma di {r['n_sorgenti']} sorgenti: il livello totale supera la sorgente dominante di {r['incremento_dB']:.1f} dB")
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
+    elif tool_sic == "Rumore — LEX,8h Esposizione":
+        st.subheader("Livello Esposizione Giornaliero LEX,8h (D.Lgs 81/2008)")
+        n_esp = st.number_input("Numero esposizioni giornaliere:", min_value=1, max_value=8, value=2, step=1, key="lex_n")
+        t_list, L_list = [], []
+        for i in range(int(n_esp)):
+            c1, c2 = st.columns(2)
+            with c1:
+                t_i = st.number_input(f"Durata {i+1} [min]:", value=240.0 if i == 0 else 60.0, min_value=1.0, key=f"lex_t{i}")
+            with c2:
+                L_i = st.number_input(f"LAeq,{i+1} [dB(A)]:", value=88.0 if i == 0 else 75.0, min_value=40.0, max_value=140.0, key=f"lex_L{i}")
+            t_list.append(t_i)
+            L_list.append(L_i)
+        if st.button("Calcola LEX,8h", key="lex_btn"):
+            try:
+                r = rumore.lex_8h(t_list, L_list)
+                colore = "error" if r["LEX_8h_dBA"] >= rumore.LEX_LIMITE_dB else ("warning" if r["LEX_8h_dBA"] >= rumore.LEX_SUPERIORE_dB else ("info" if r["LEX_8h_dBA"] >= rumore.LEX_INFERIORE_dB else "success"))
+                getattr(st, colore)(f"LEX,8h = {r['LEX_8h_dBA']:.1f} dB(A)  —  {r['rischio']}")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("LEX,8h", f"{r['LEX_8h_dBA']:.1f} dB(A)")
+                c2.metric("Dose esposizione", f"{r['dose_pct']:.1f} %")
+                c3.metric("DPI obbligatori", "SÌ" if r["dpi_obbligo"] else "NO")
+                _barra_utilizzo(min(r["dose_pct"], 100), "Dose rispetto al limite 87 dB(A)")
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
+    elif tool_sic == "Rumore — Verifica DPI (SNR)":
+        st.subheader("Verifica Adeguatezza DPI — Metodo SNR (EN ISO 4869-2)")
+        col1, col2 = st.columns(2)
+        with col1:
+            dpi_sel  = st.selectbox("DPI:", list(rumore.DPI_SNR.keys()), key="dpi_sel")
+            SNR_val  = rumore.DPI_SNR[dpi_sel]
+            st.info(f"SNR nominale: {SNR_val} dB")
+        with col2:
+            L_amb_dpi = st.number_input("Livello ambiente L_amb [dB(A)]:", value=95.0, min_value=40.0, max_value=140.0, key="dpi_Lamb")
+        if st.button("Verifica DPI", key="dpi_btn"):
+            try:
+                r = rumore.attenuazione_dpi(SNR_val, L_amb_dpi)
+                colore_dpi = "success" if r["protezione_adeguata"] else "error"
+                getattr(st, colore_dpi)(f"L efficace sotto DPI: {r['L_eff_dBA']:.1f} dB(A)  —  {r['giudizio']}")
+                c1, c2 = st.columns(2)
+                c1.metric("L amb", f"{r['L_amb_dBA']:.1f} dB(A)")
+                c2.metric("L eff. DPI", f"{r['L_eff_dBA']:.1f} dB(A)")
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
+    elif tool_sic == "Rumore — Attenuazione per Distanza":
+        st.subheader("Attenuazione Geometrica (campo libero, sorgente puntuale)")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            L_sorg  = st.number_input("L a distanza d1 [dB]:", value=95.0, min_value=0.0, key="att_L")
+        with col2:
+            d1_att  = st.number_input("d1 [m]:", value=1.0, min_value=0.01, key="att_d1")
+        with col3:
+            d2_att  = st.number_input("d2 [m]:", value=10.0, min_value=0.01, key="att_d2")
+        if st.button("Calcola Attenuazione", key="att_btn"):
+            try:
+                r = rumore.attenuazione_distanza(L_sorg, d1_att, d2_att)
+                st.success(f"L a {d2_att} m = {r['L_d2_dB']:.1f} dB  (attenuazione: -{r['delta_dB']:.1f} dB)")
+                if _PLOTLY:
+                    import numpy as _np
+                    d_arr = [d1_att * (d2_att/d1_att)**(i/49) for i in range(50)]
+                    L_arr = [L_sorg - 20*_np.log10(d/d1_att) for d in d_arr]
+                    fig_att = go.Figure()
+                    fig_att.add_trace(go.Scatter(x=d_arr, y=L_arr, mode="lines", name="L(d)", line=dict(color="#FF5722", width=2)))
+                    fig_att.add_hline(y=rumore.LEX_LIMITE_dB, line_dash="dash", line_color="red", annotation_text="Limite 87 dB(A)")
+                    fig_att.add_hline(y=rumore.LEX_SUPERIORE_dB, line_dash="dot", line_color="orange", annotation_text="Val. sup. 85 dB(A)")
+                    fig_att.update_layout(title="Attenuazione per distanza", xaxis_title="Distanza [m]", yaxis_title="L [dB]", xaxis_type="log", height=320)
+                    st.plotly_chart(fig_att, use_container_width=True)
+            except (ValueError, ZeroDivisionError) as e:
                 st.error(str(e))
 
 
