@@ -28,7 +28,7 @@ PRESSIONE_ATM_PA = 101325.0  # Pa (ISO 2533)
 # --- Densità e costanti fisiche ---
 DENSITA_ACQUA_KG_M3 = 1000.0          # kg/m³ a 4°C (acqua pura)
 GRAVITA_STD         = 9.80665          # m/s² (accelerazione di gravità standard ISO 80000)
-MCA_PER_PA          = 1.0 / (DENSITA_ACQUA_KG_M3 * GRAVITA_STD)  # m.c.a. per Pascal
+PA_PER_MCA          = DENSITA_ACQUA_KG_M3 * GRAVITA_STD           # Pascal per metro colonna d'acqua (≈ 9806.65)
 
 # --- Sezioni commerciali normalizzate [mm²] (CEI UNEL 35011) ---
 SEZIONI_COMMERCIALI = (1.5, 2.5, 4.0, 6.0, 10.0, 16.0, 25.0, 35.0, 50.0, 70.0, 95.0, 120.0)

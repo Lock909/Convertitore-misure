@@ -22,7 +22,7 @@ def _valida_cos_phi(cos_phi):
 # Legge di Ohm
 # ------------------------------------------------------------------------------
 
-def calcola_ohm(ricerca, input_1, input_2):
+def calcola_ohm(ricerca: str, input_1: float, input_2: float) -> float:
     """
     Calcola la grandezza mancante dalla Legge di Ohm (V = R·I).
 
@@ -31,17 +31,20 @@ def calcola_ohm(ricerca, input_1, input_2):
     ricerca : str   — 'Tensione' | 'Corrente' | 'Resistenza'
     input_1 : float — primo valore noto
     input_2 : float — secondo valore noto
+
+    Ritorna  : float — valore calcolato
+    Eccezioni: ValueError se il divisore è zero
     """
     if ricerca == "Tensione":
-        return f"Tensione (V): {input_1 * input_2:.4f} V"
+        return input_1 * input_2
     elif ricerca == "Corrente":
         if input_2 == 0:
-            return "Errore: R = 0 (divisione impossibile)"
-        return f"Corrente (I): {input_1 / input_2:.4f} A"
+            raise ValueError("R = 0: divisione impossibile.")
+        return input_1 / input_2
     else:
         if input_2 == 0:
-            return "Errore: I = 0 (divisione impossibile)"
-        return f"Resistenza (R): {input_1 / input_2:.4f} Ω"
+            raise ValueError("I = 0: divisione impossibile.")
+        return input_1 / input_2
 
 
 # ------------------------------------------------------------------------------
@@ -148,7 +151,7 @@ def converti_potenza(valore, da_unita, a_unita, cos_phi=1.0):
         raise ValueError(f"Unità destinazione non riconosciuta: '{a_unita}'. Valide: {sorted(unita_valide)}")
 
     if valore < 0:
-        raise ValueError("La potenza da convertire non puÃ² essere negativa.")
+        raise ValueError("La potenza da convertire non può essere negativa.")
     if da_unita == "kVA" or a_unita == "kVA":
         _valida_cos_phi(cos_phi)
 
@@ -187,7 +190,7 @@ def calcola_rifasamento_kvar(p_attiva_kw, cos_ini, cos_fin):
     stato   : str   — 'OK' oppure messaggio di avviso
     """
     if p_attiva_kw < 0:
-        return 0.0, "Errore: la potenza attiva non puÃ² essere negativa."
+        return 0.0, "Errore: la potenza attiva non può essere negativa."
     if cos_ini <= 0 or cos_fin <= 0 or cos_ini > 1 or cos_fin > 1:
         return 0.0, "Errore: fattori di potenza non validi."
     if cos_ini >= cos_fin:
@@ -236,9 +239,9 @@ def calcola_caduta_avanzata(
     if fasi not in ("Monofase", "Trifase"):
         raise ValueError("Sistema di fase non riconosciuto.")
     if amp < 0:
-        raise ValueError("La corrente di impiego non puÃ² essere negativa.")
+        raise ValueError("La corrente di impiego non può essere negativa.")
     if metri < 0:
-        raise ValueError("La lunghezza della linea non puÃ² essere negativa.")
+        raise ValueError("La lunghezza della linea non può essere negativa.")
     if sez <= 0:
         raise ValueError("La sezione del conduttore deve essere maggiore di zero.")
     if iz_nominale <= 0:
@@ -323,7 +326,7 @@ def calcola_sezione_protezione(i_max, densita):
     interruttore, sezione_scelta, sezione_teorica
     """
     if i_max < 0:
-        raise ValueError("La corrente di impiego non puÃ² essere negativa.")
+        raise ValueError("La corrente di impiego non può essere negativa.")
     if densita <= 0:
         raise ValueError("La densitÃ  di corrente deve essere maggiore di zero.")
 
@@ -390,9 +393,9 @@ def calcola_corrente_cortocircuito(
     if materiale not in ("Rame", "Alluminio"):
         raise ValueError("Materiale non riconosciuto.")
     if sez <= 0:
-        raise ValueError("La sezione del conduttore deve essere > 0 mmÂ².")
+        raise ValueError("La sezione del conduttore deve essere > 0 mm².")
     if lunghezza_m < 0:
-        raise ValueError("La lunghezza della linea non puÃ² essere negativa.")
+        raise ValueError("La lunghezza della linea non può essere negativa.")
     if fasi not in ("Monofase", "Trifase"):
         raise ValueError("Sistema di fase non riconosciuto.")
     if c <= 0:

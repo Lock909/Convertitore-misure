@@ -4,19 +4,12 @@ import math
 # Tutte le grandezze usano l'unità SI come perno interno.
 # ==============================================================================
 
-from costanti import PRESSIONE_ATM_PA, DENSITA_ACQUA_KG_M3, GRAVITA_STD, MCA_PER_PA
+from costanti import PRESSIONE_ATM_PA, PA_PER_MCA
 
 
-ZERO_ASSOLUTO_K = 0.0
-
-
-def ottieni_categorie():
-    """
-    Restituisce il dizionario delle grandezze supportate con i fattori di
-    conversione verso l'unità SI base.
-    La temperatura è 'Special' perché usa formule non lineari.
-    """
-    return {
+# Dizionario delle grandezze supportate con i fattori verso l'unità SI base.
+# Costruito una sola volta a livello di modulo: O(1) per ogni accesso successivo.
+_CATEGORIE: dict = {
         # ------------------------------------------------------------------ #
         "Pressione": {
             # Perno: Pascal (Pa)
@@ -34,7 +27,7 @@ def ottieni_categorie():
             "psig": 6_894.757,      # relativa → serve offset P_atm
             "mmhg": 133.322387,
             "torr": 133.322368,
-            "mca":  1.0 / MCA_PER_PA,          # ≈ 9806.65 Pa  (= ρ_acqua × g)
+            "mca":  PA_PER_MCA,                 # ≈ 9806.65 Pa  (= ρ_acqua × g)
             "at":   98_066.5,                  # atmosfera tecnica: 1 kgf/cm² = 98066.5 Pa
             "cmH2O": 98.0665,                  # colonna d acqua: 1 cmH2O = ρ×g×0.01 m = 98.0665 Pa
             "inH2O": 249.08890,                # pollici d acqua (4°C): 0.0254 × 9806.65 = 249.089 Pa
@@ -204,7 +197,12 @@ def ottieni_categorie():
             "k": "Special",
             "r": "Special",     # Rankine
         },
-    }
+}
+
+
+def ottieni_categorie() -> dict:
+    """Restituisce il dizionario delle grandezze supportate."""
+    return _CATEGORIE
 
 
 # ------------------------------------------------------------------------------
@@ -261,14 +259,9 @@ def esegui_conversione(cat, from_u, to_u, val):
         raise ValueError(f"UnitÃ  destinazione non valida per la categoria '{cat}': '{to_u}'.")
 
     if cat == "Temperatura":
-        if (
-            (from_u == "c" and val < -273.15) or
-            (from_u == "f" and val < -459.67) or
-            (from_u == "k" and val < ZERO_ASSOLUTO_K) or
-            (from_u == "r" and val < ZERO_ASSOLUTO_K)
-        ):
-            raise ValueError("La temperatura non puÃ² scendere sotto lo zero assoluto.")
         kelvin = _a_kelvin(val, from_u)
+        if kelvin < 0.0:
+            raise ValueError("La temperatura non può scendere sotto lo zero assoluto.")
         return _da_kelvin(kelvin, to_u)
 
     elif cat == "Pressione":
