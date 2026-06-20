@@ -25,6 +25,16 @@ import valvole_controllo as valvole
 import rumore_industriale as rumore
 import dissipatore as diss
 import nastri_trasportatori as nastri
+import impianto_terra as terra
+import selettivita_protezioni as selet
+import fotovoltaico as fv
+import gruppo_elettrogeno as ge
+import cuscinetti as cus
+import molle
+import ruote_dentate as rd
+import perdite_carico_distribuite as pcd
+import trasduttori_pressione as tp
+import quadro_elettrico as qe
 
 
 class TestAutomazione(unittest.TestCase):
@@ -774,6 +784,262 @@ class TestNastriTrasportatori(unittest.TestCase):
     def test_input_non_valido(self):
         with self.assertRaises(ValueError):
             nastri.portata_massica(0, 1.5, 800)
+
+
+class TestImpiantoTerra(unittest.TestCase):
+    def test_resistenza_picchetto(self):
+        r = terra.resistenza_dispersore_picchetto(2.0, 100.0)
+        self.assertGreater(r["R_ohm"], 0)
+
+    def test_picchetti_paralleli(self):
+        r1 = terra.resistenza_dispersore_picchetto(2.0, 100.0)
+        r2 = terra.resistenza_picchetti_paralleli(r1["R_ohm"], 4)
+        self.assertLess(r2["R_eq_ohm"], r1["R_ohm"])
+
+    def test_sezione_minima_pe(self):
+        r = terra.sezione_minima_pe(1000, 0.5)
+        self.assertAlmostEqual(r["S_mm2_minima"], (1000**2*0.5)**0.5/143.0, places=5)
+
+    def test_verifica_tensione_contatto_conforme(self):
+        r = terra.verifica_tensione_contatto(20, 0.5)
+        self.assertTrue(r["conforme"])
+
+    def test_verifica_tensione_contatto_non_conforme(self):
+        r = terra.verifica_tensione_contatto(100, 1.0)
+        self.assertFalse(r["conforme"])
+
+    def test_coordinamento_tt(self):
+        r = terra.coordinamento_tt(20, 0.3)
+        self.assertTrue(r["conforme"])
+
+
+class TestSelettivitaProtezioni(unittest.TestCase):
+    def test_selettivita_amperometrica_ok(self):
+        r = selet.verifica_selettivita_amperometrica(100, 40)
+        self.assertTrue(r["selettivo"])
+
+    def test_selettivita_amperometrica_no(self):
+        r = selet.verifica_selettivita_amperometrica(50, 40)
+        self.assertFalse(r["selettivo"])
+
+    def test_selettivita_differenziale_ok(self):
+        r = selet.verifica_selettivita_differenziale(300, 30)
+        self.assertTrue(r["selettivita_amperometrica"])
+
+    def test_icc_minima(self):
+        r = selet.corrente_corto_circuito_minima(230, 0.5)
+        self.assertAlmostEqual(r["Icc_min_A"], 460.0, places=3)
+
+    def test_tempo_intervento_curva_c(self):
+        r = selet.tempo_intervento_curva(7, "C")
+        self.assertEqual(r["zona_intervento"], "Zona di intervento magnetico (incertezza costruttiva)")
+
+    def test_curva_non_valida(self):
+        with self.assertRaises(ValueError):
+            selet.tempo_intervento_curva(7, "X")
+
+
+class TestFotovoltaico(unittest.TestCase):
+    def test_producibilita(self):
+        r = fv.producibilita_annua(6.0, 1400, 0.80)
+        self.assertAlmostEqual(r["E_anno_kWh"], 6720.0, places=3)
+
+    def test_numero_pannelli(self):
+        r = fv.numero_pannelli(6.0, 450)
+        self.assertEqual(r["n_pannelli"], 14)
+
+    def test_dimensiona_stringa(self):
+        r = fv.dimensiona_stringa(45.0, 20)
+        self.assertIn("V_stringa_V", r)
+
+    def test_scelta_inverter(self):
+        r = fv.scelta_inverter(6.0, 1.2)
+        self.assertAlmostEqual(r["P_inverter_kW"], 5.0, places=3)
+
+    def test_payback(self):
+        r = fv.tempo_ritorno_investimento(8000, 6720, 0.25, 70)
+        self.assertGreater(r["payback_anni"], 0)
+
+    def test_irraggiamento_invalido(self):
+        with self.assertRaises(ValueError):
+            fv.producibilita_annua(6.0, -100)
+
+
+class TestGruppoElettrogeno(unittest.TestCase):
+    def test_potenza_spunto(self):
+        r = ge.potenza_spunto_motore(15, 0.85, 6.0, 0.90)
+        self.assertGreater(r["S_spunto_kVA"], r["S_nom_kVA"])
+
+    def test_dimensiona_gruppo(self):
+        r = ge.dimensiona_gruppo([10, 20, 5])
+        self.assertEqual(r["P_tot_kW"], 35)
+        self.assertGreater(r["S_gruppo_kVA"], 0)
+
+    def test_autonomia_serbatoio(self):
+        r = ge.autonomia_serbatoio(500, 50)
+        self.assertGreater(r["t_autonomia_h"], 0)
+
+    def test_serbatoio_per_autonomia(self):
+        r = ge.serbatoio_per_autonomia(50, 10)
+        self.assertGreater(r["V_necessario_L"], 0)
+
+    def test_lista_vuota(self):
+        with self.assertRaises(ValueError):
+            ge.dimensiona_gruppo([])
+
+
+class TestCuscinetti(unittest.TestCase):
+    def test_durata_l10_sfere(self):
+        r = cus.durata_l10(25, 5, "sfere")
+        self.assertAlmostEqual(r["L10_milioni_giri"], 125.0, places=3)
+
+    def test_durata_l10_rulli(self):
+        r = cus.durata_l10(25, 5, "rulli")
+        self.assertAlmostEqual(r["L10_milioni_giri"], 5.0**(10.0/3.0), places=3)
+
+    def test_durata_ore(self):
+        r = cus.durata_ore(100, 1500)
+        self.assertAlmostEqual(r["L10h"], 100e6/(60*1500), places=2)
+
+    def test_carico_dinamico_equivalente(self):
+        r = cus.carico_dinamico_equivalente([5, 10], [0.5, 0.5])
+        self.assertGreater(r["P_eq_kN"], 5)
+        self.assertLess(r["P_eq_kN"], 10)
+
+    def test_tipo_non_valido(self):
+        with self.assertRaises(ValueError):
+            cus.durata_l10(25, 5, "quadrati")
+
+
+class TestMolle(unittest.TestCase):
+    def test_costante_elastica(self):
+        r = molle.molla_compressione(2.0, 20.0, 10)
+        self.assertGreater(r["k_N_mm"], 0)
+
+    def test_indice_molla(self):
+        r = molle.molla_compressione(2.0, 20.0, 10)
+        self.assertAlmostEqual(r["indice_molla_C"], 10.0, places=3)
+
+    def test_tensione_torsionale(self):
+        r = molle.tensione_torsionale_molla(100, 2.0, 20.0)
+        self.assertGreater(r["tau_MPa"], 0)
+
+    def test_frequenza_naturale(self):
+        r = molle.frequenza_naturale_molla(2.0, 1.0)
+        self.assertGreater(r["f_Hz"], 0)
+
+    def test_molla_torsione(self):
+        r = molle.molla_torsione(2.0, 20.0, 10)
+        self.assertGreater(r["k_theta_Nmm_rad"], 0)
+
+    def test_indice_invalido(self):
+        with self.assertRaises(ValueError):
+            molle.tensione_torsionale_molla(100, 20.0, 20.0)
+
+
+class TestRuoteDentate(unittest.TestCase):
+    def test_geometria(self):
+        r = rd.geometria_ruota(3, 20)
+        self.assertEqual(r["d_primitivo_mm"], 60)
+
+    def test_modulo_minimo(self):
+        r = rd.modulo_minimo_lewis(50, 20, 10, 200)
+        self.assertGreater(r["m_minimo_mm"], 0)
+
+    def test_verifica_flessione(self):
+        r = rd.verifica_flessione_lewis(50, 3, 20, 24)
+        self.assertGreater(r["sigma_flessione_MPa"], 0)
+
+    def test_rapporto_trasmissione(self):
+        r = rd.rapporto_trasmissione_ruote(20, 60)
+        self.assertAlmostEqual(r["tau"], 3.0, places=3)
+        self.assertTrue(r["riduzione"])
+
+    def test_denti_invalidi(self):
+        with self.assertRaises(ValueError):
+            rd.geometria_ruota(3, 0)
+
+
+class TestPerditeCaricoDistribuite(unittest.TestCase):
+    def test_reynolds(self):
+        r = pcd.numero_reynolds(2.0, 100.0)
+        self.assertAlmostEqual(r["Re"], 2.0*0.1/1e-6, places=2)
+
+    def test_fattore_attrito_laminare(self):
+        r = pcd.fattore_attrito_swamee_jain(1000, 0.001)
+        self.assertAlmostEqual(r["f_darcy"], 64.0/1000, places=5)
+        self.assertEqual(r["regime"], "Laminare")
+
+    def test_fattore_attrito_turbolento(self):
+        r = pcd.fattore_attrito_swamee_jain(100000, 0.001)
+        self.assertEqual(r["regime"], "Turbolento")
+        self.assertGreater(r["f_darcy"], 0)
+
+    def test_perdita_distribuita(self):
+        r = pcd.perdita_distribuita(50, 100, 100)
+        self.assertGreater(r["dP_bar"], 0)
+
+    def test_diametro_da_velocita(self):
+        r = pcd.diametro_da_velocita_max(50, 2.0)
+        self.assertGreater(r["D_minimo_mm"], 0)
+
+    def test_input_invalido(self):
+        with self.assertRaises(ValueError):
+            pcd.perdita_distribuita(-1, 100, 100)
+
+
+class TestTrasduttoriPressione(unittest.TestCase):
+    def test_ma_a_pressione_centro_scala(self):
+        r = tp.ma_a_pressione(12.0, 20.0)
+        self.assertAlmostEqual(r["P_bar"], 10.0, places=3)
+
+    def test_ma_a_pressione_minimo(self):
+        r = tp.ma_a_pressione(4.0, 20.0)
+        self.assertAlmostEqual(r["P_bar"], 0.0, places=5)
+
+    def test_ma_a_pressione_massimo(self):
+        r = tp.ma_a_pressione(20.0, 20.0)
+        self.assertAlmostEqual(r["P_bar"], 20.0, places=3)
+
+    def test_pressione_a_ma_inversa(self):
+        r1 = tp.ma_a_pressione(15.0, 30.0)
+        r2 = tp.pressione_a_ma(r1["P_bar"], 30.0)
+        self.assertAlmostEqual(r2["I_mA"], 15.0, places=3)
+
+    def test_corrente_fuori_range(self):
+        with self.assertRaises(ValueError):
+            tp.ma_a_pressione(3.0, 20.0)
+
+    def test_caduta_tensione_loop(self):
+        r = tp.caduta_tensione_loop_4_20(250, 100)
+        self.assertTrue(r["sufficiente"])
+
+
+class TestQuadroElettrico(unittest.TestCase):
+    def test_potenza_dissipata(self):
+        r = qe.potenza_dissipata_componenti({"plc": 8, "io": 3})
+        self.assertEqual(r["P_tot_W"], 11)
+
+    def test_superficie_quadro(self):
+        r = qe.superficie_quadro(0.6, 0.8, 0.3)
+        self.assertGreater(r["A_tot_m2"], 0)
+
+    def test_superficie_a_parete_minore(self):
+        r1 = qe.superficie_quadro(0.6, 0.8, 0.3, installato_a_parete=False)
+        r2 = qe.superficie_quadro(0.6, 0.8, 0.3, installato_a_parete=True)
+        self.assertLess(r2["A_tot_m2"], r1["A_tot_m2"])
+
+    def test_aumento_temperatura(self):
+        r = qe.aumento_temperatura_quadro(50, 2.0)
+        self.assertGreater(r["delta_T_K"], 0)
+
+    def test_verifica_temperatura_conforme(self):
+        r = qe.verifica_temperatura_quadro(50, 2.0, 30)
+        self.assertTrue(r["conforme"])
+
+    def test_componenti_vuoti(self):
+        with self.assertRaises(ValueError):
+            qe.potenza_dissipata_componenti({})
 
 
 if __name__ == "__main__":

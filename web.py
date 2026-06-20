@@ -31,6 +31,24 @@ import valvole_controllo as valvole
 import rumore_industriale as rumore
 import dissipatore as diss
 import nastri_trasportatori as nastri
+import impianto_terra as terra
+import selettivita_protezioni as selet
+import fotovoltaico as fv
+import gruppo_elettrogeno as ge
+import cuscinetti as cus
+import molle
+import ruote_dentate as rd
+import perdite_carico_distribuite as pcd
+import trasduttori_pressione as tp
+import quadro_elettrico as qe
+import rifasamento_condensatori as rifas
+import caduta_tensione_bt as cadbt
+import tubazione_pressione as tubp
+import avviamento_motore as avv
+import alberi_torsione as alb
+import saldature as sald
+import condotte_hvac as hvac
+import performance_level as pl_iso
 from costanti import SEZIONI_COMMERCIALI, TENSIONE_MONOFASE, TENSIONE_TRIFASE
 
 
@@ -340,6 +358,14 @@ elif categoria == "⚡  Calcoli Elettrici":
             "Armonie e THD",
             "Batterie e UPS",
             "Dissipatore Termico",
+            "Impianto di Terra",
+            "Selettività Protezioni",
+            "Fotovoltaico",
+            "Gruppo Elettrogeno",
+            "Quadro Elettrico — Dissipazione",
+            "Rifasamento Condensatori",
+            "Caduta Tensione BT (CEI 64-8)",
+            "Avviamento Motore Asincrono",
             "Motore Asincrono — Dati di Targa",
             "Motore Asincrono — Classi IE (Efficienza)",
         ],
@@ -1116,6 +1142,408 @@ elif categoria == "⚡  Calcoli Elettrici":
                     r = diss.curva_derating(P25, Tj_der, T_max_d)
                     st.write({f"{t:.0f}°C": f"{p:.1f} W" for t, p in zip(r["T_amb_C"], r["P_max_W"])})
 
+    elif tipo == "Impianto di Terra":
+        st.subheader("Impianto di Terra (CEI 64-8 / CEI 11-1)")
+        sub_terra = st.radio("Calcolo:", ["Resistenza dispersore", "Sezione minima PE", "Verifica tensione di contatto", "Coordinamento TT"], horizontal=True, key="terra_sub")
+        if sub_terra == "Resistenza dispersore":
+            col1, col2 = st.columns(2)
+            with col1:
+                L_picchetto = st.number_input("Lunghezza picchetto L [m]:", value=2.0, min_value=0.1, key="terra_L")
+                rho_sel = st.selectbox("Tipo terreno:", list(terra.RESISTIVITA_TERRENO.keys()), key="terra_rho_sel")
+                rho_val = terra.RESISTIVITA_TERRENO[rho_sel]
+                st.info(f"ρ = {rho_val} Ω·m")
+            with col2:
+                d_picchetto = st.number_input("Diametro picchetto d [mm]:", value=20.0, min_value=1.0, key="terra_d") / 1000.0
+                n_picchetti = st.number_input("Numero picchetti in parallelo:", value=1, min_value=1, step=1, key="terra_n")
+            if st.button("Calcola Resistenza", key="terra_btn1"):
+                try:
+                    r1 = terra.resistenza_dispersore_picchetto(L_picchetto, rho_val, d_picchetto)
+                    if n_picchetti > 1:
+                        r2 = terra.resistenza_picchetti_paralleli(r1["R_ohm"], int(n_picchetti))
+                        st.success(f"R singolo picchetto = {r1['R_ohm']:.2f} Ω  →  R equivalente ({int(n_picchetti)} picchetti) = {r2['R_eq_ohm']:.2f} Ω")
+                    else:
+                        st.success(f"R dispersore = {r1['R_ohm']:.2f} Ω")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_terra == "Sezione minima PE":
+            col1, col2 = st.columns(2)
+            with col1:
+                I_g = st.number_input("Corrente di guasto I_g [A]:", value=1000.0, min_value=1.0, key="terra_Ig")
+                t_int = st.number_input("Tempo di intervento t [s]:", value=0.5, min_value=0.01, key="terra_t")
+            with col2:
+                k_mat = st.selectbox("Materiale/isolamento:", ["Rame con PVC (k=143)", "Rame con XLPE (k=176)", "Alluminio con PVC (k=95)"], key="terra_k")
+                k_val = {"Rame con PVC (k=143)": 143.0, "Rame con XLPE (k=176)": 176.0, "Alluminio con PVC (k=95)": 95.0}[k_mat]
+            if st.button("Calcola Sezione PE", key="terra_btn2"):
+                try:
+                    r = terra.sezione_minima_pe(I_g, t_int, k_val)
+                    st.success(f"Sezione minima PE = {r['S_mm2_minima']:.2f} mm²")
+                    st.caption("Arrotondare alla sezione commerciale superiore disponibile.")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_terra == "Verifica tensione di contatto":
+            col1, col2 = st.columns(2)
+            with col1:
+                R_t = st.number_input("Resistenza di terra R [Ω]:", value=20.0, min_value=0.1, key="terra_Rt")
+                I_g2 = st.number_input("Corrente di guasto I_g [A]:", value=0.5, min_value=0.001, key="terra_Ig2")
+            with col2:
+                UTp = st.number_input("Tensione di contatto limite UTp [V]:", value=50.0, min_value=1.0, key="terra_UTp")
+            if st.button("Verifica", key="terra_btn3"):
+                try:
+                    r = terra.verifica_tensione_contatto(R_t, I_g2, UTp)
+                    colore = "success" if r["conforme"] else "error"
+                    getattr(st, colore)(f"U_c = {r['U_c_V']:.2f} V  (limite {UTp} V)  —  {r['giudizio']}")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                R_tt = st.number_input("Resistenza di terra R [Ω]:", value=20.0, min_value=0.1, key="terra_Rtt")
+            with col2:
+                I_dn = st.number_input("Corrente diff. nominale I_dn [A]:", value=0.3, min_value=0.001, key="terra_Idn")
+            if st.button("Verifica Coordinamento", key="terra_btn4"):
+                try:
+                    r = terra.coordinamento_tt(R_tt, I_dn)
+                    colore = "success" if r["conforme"] else "error"
+                    getattr(st, colore)(f"R_max ammessa = {r['R_max_ohm']:.2f} Ω  —  {r['giudizio']}")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+
+    elif tipo == "Selettività Protezioni":
+        st.subheader("Selettività e Coordinamento Protezioni (CEI 64-8 / IEC 60947-2)")
+        sub_sel = st.radio("Calcolo:", ["Selettività amperometrica", "Selettività differenziale", "Icc minima", "Curve di intervento"], horizontal=True, key="sel_sub")
+        if sub_sel == "Selettività amperometrica":
+            col1, col2 = st.columns(2)
+            with col1:
+                I_monte = st.number_input("I_n interruttore a monte [A]:", value=100.0, min_value=1.0, key="sel_Imonte")
+            with col2:
+                I_valle = st.number_input("I_n interruttore a valle [A]:", value=40.0, min_value=1.0, key="sel_Ivalle")
+            if st.button("Verifica Selettività", key="sel_btn1"):
+                try:
+                    r = selet.verifica_selettivita_amperometrica(I_monte, I_valle)
+                    colore = "success" if r["selettivo"] else "error"
+                    getattr(st, colore)(f"Rapporto = {r['rapporto']:.2f}  (minimo {r['rapporto_minimo']})  —  {r['giudizio']}")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_sel == "Selettività differenziale":
+            col1, col2 = st.columns(2)
+            with col1:
+                Idn_monte = st.number_input("I_dn a monte [mA]:", value=300.0, min_value=1.0, key="sel_Idnmonte")
+                Idn_valle = st.number_input("I_dn a valle [mA]:", value=30.0, min_value=1.0, key="sel_Idnvalle")
+            with col2:
+                t_monte = st.number_input("Tempo intervento a monte [ms] (0=non noto):", value=0.0, min_value=0.0, key="sel_tmonte")
+                t_valle = st.number_input("Tempo intervento a valle [ms] (0=non noto):", value=0.0, min_value=0.0, key="sel_tvalle")
+            if st.button("Verifica Selettività Diff.", key="sel_btn2"):
+                try:
+                    r = selet.verifica_selettivita_differenziale(Idn_monte, Idn_valle, t_monte, t_valle)
+                    st.info(f"Rapporto I_dn = {r['rapporto_Idn']:.2f}  —  {r['giudizio']}")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_sel == "Icc minima":
+            col1, col2 = st.columns(2)
+            with col1:
+                V_icc = st.number_input("Tensione V [V]:", value=230.0, min_value=1.0, key="sel_Vicc")
+            with col2:
+                Z_icc = st.number_input("Impedenza anello di guasto Z [Ω]:", value=0.5, min_value=0.001, key="sel_Zicc")
+            if st.button("Calcola Icc min", key="sel_btn3"):
+                try:
+                    r = selet.corrente_corto_circuito_minima(V_icc, Z_icc)
+                    st.success(f"Icc minima = {r['Icc_min_A']:.1f} A")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                curva_sel = st.selectbox("Tipo curva:", ["B", "C", "D", "K", "Z"], index=1, key="sel_curva")
+            with col2:
+                I_In = st.number_input("Rapporto I/In:", value=7.0, min_value=0.1, key="sel_I_In")
+            if st.button("Verifica Zona", key="sel_btn4"):
+                try:
+                    r = selet.tempo_intervento_curva(I_In, curva_sel)
+                    st.info(f"Zona: {r['zona_intervento']}  (soglia magnetica {r['soglia_min_In']}-{r['soglia_max_In']} In)")
+                    st.caption("Curve: " + "  |  ".join([f"**{k}**: {v}" for k, v in selet.CURVE_MAGNETOTERMICI.items()]))
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+
+    elif tipo == "Fotovoltaico":
+        st.subheader("Dimensionamento Impianto Fotovoltaico")
+        sub_fv = st.radio("Calcolo:", ["Producibilità annua", "Numero pannelli", "Stringa e inverter", "Tempo di ritorno"], horizontal=True, key="fv_sub")
+        if sub_fv == "Producibilità annua":
+            col1, col2 = st.columns(2)
+            with col1:
+                P_picco = st.number_input("Potenza di picco [kWp]:", value=6.0, min_value=0.1, key="fv_Ppicco")
+                zona_sel = st.selectbox("Zona geografica:", list(fv.IRRAGGIAMENTO_ITALIA.keys()), key="fv_zona")
+                irraggio = fv.IRRAGGIAMENTO_ITALIA[zona_sel]
+            with col2:
+                PR = st.number_input("Performance Ratio:", value=0.80, min_value=0.5, max_value=1.0, key="fv_PR")
+            if st.button("Calcola Producibilità", key="fv_btn1"):
+                try:
+                    r = fv.producibilita_annua(P_picco, irraggio, PR)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("E annua", f"{r['E_anno_kWh']:.0f} kWh")
+                    c2.metric("E mensile media", f"{r['E_mese_kWh']:.0f} kWh")
+                    c3.metric("Ore equivalenti", f"{r['ore_equivalenti_h']:.0f} h")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_fv == "Numero pannelli":
+            col1, col2 = st.columns(2)
+            with col1:
+                P_rich = st.number_input("Potenza richiesta [kWp]:", value=6.0, min_value=0.1, key="fv_Prich")
+            with col2:
+                P_pan = st.number_input("Potenza per pannello [Wp]:", value=450.0, min_value=50.0, key="fv_Ppan")
+            if st.button("Calcola Numero Pannelli", key="fv_btn2"):
+                try:
+                    r = fv.numero_pannelli(P_rich, P_pan)
+                    st.success(f"Pannelli necessari: {r['n_pannelli']}  →  Potenza reale: {r['P_reale_kWp']:.2f} kWp")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_fv == "Stringa e inverter":
+            col1, col2 = st.columns(2)
+            with col1:
+                V_oc = st.number_input("V_oc pannello [V]:", value=45.0, min_value=1.0, key="fv_Voc")
+                n_pan_str = st.number_input("Pannelli in serie:", value=20, min_value=1, step=1, key="fv_npanstr")
+            with col2:
+                V_max_inv = st.number_input("V max inverter [V]:", value=1000.0, min_value=1.0, key="fv_Vmaxinv")
+                T_min = st.number_input("T minima di progetto [°C]:", value=-10.0, key="fv_Tmin")
+            if st.button("Verifica Stringa", key="fv_btn3"):
+                try:
+                    r = fv.dimensiona_stringa(V_oc, int(n_pan_str), V_max_inv, -0.30, T_min)
+                    colore = "success" if r["entro_limiti"] else "error"
+                    getattr(st, colore)(f"V stringa a {T_min}°C = {r['V_stringa_V']:.1f} V  —  {r['giudizio']}")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+            st.markdown("---")
+            P_picco_inv = st.number_input("Potenza di picco impianto [kWp]:", value=6.0, min_value=0.1, key="fv_Ppicco_inv")
+            if st.button("Suggerisci Inverter", key="fv_btn4"):
+                try:
+                    r = fv.scelta_inverter(P_picco_inv)
+                    st.info(f"Potenza inverter consigliata: {r['P_inverter_kW']:.2f} kW  (DC/AC ratio {r['rapporto_DC_AC']})")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                costo_imp = st.number_input("Costo impianto [€]:", value=8000.0, min_value=100.0, key="fv_costo")
+                E_anno_pb = st.number_input("Energia prodotta annua [kWh]:", value=6720.0, min_value=100.0, key="fv_Eanno")
+            with col2:
+                prezzo_en = st.number_input("Prezzo energia [€/kWh]:", value=0.25, min_value=0.01, key="fv_prezzo")
+                autocons = st.number_input("Autoconsumo [%]:", value=70.0, min_value=1.0, max_value=100.0, key="fv_autocons")
+            if st.button("Calcola Payback", key="fv_btn5"):
+                try:
+                    r = fv.tempo_ritorno_investimento(costo_imp, E_anno_pb, prezzo_en, autocons)
+                    st.success(f"Risparmio annuo: {r['risparmio_anno_eur']:.0f} €  —  Payback: {r['payback_anni']:.1f} anni")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+
+    elif tipo == "Gruppo Elettrogeno":
+        st.subheader("Dimensionamento Gruppo Elettrogeno")
+        sub_ge = st.radio("Calcolo:", ["Potenza di spunto motore", "Dimensiona gruppo", "Autonomia serbatoio"], horizontal=True, key="ge_sub")
+        if sub_ge == "Potenza di spunto motore":
+            col1, col2 = st.columns(2)
+            with col1:
+                P_mot_ge = st.number_input("Potenza motore [kW]:", value=15.0, min_value=0.1, key="ge_Pmot")
+                cphi_ge = st.number_input("cos phi:", value=0.85, min_value=0.1, max_value=1.0, key="ge_cphi")
+            with col2:
+                tipo_avv = st.selectbox("Tipo avviamento:", list(ge.FATTORI_SPUNTO_TIPICI.keys()), key="ge_avv")
+                fatt_spunto = ge.FATTORI_SPUNTO_TIPICI[tipo_avv]
+                st.info(f"Fattore di spunto: {fatt_spunto}")
+            if st.button("Calcola Spunto", key="ge_btn1"):
+                try:
+                    r = ge.potenza_spunto_motore(P_mot_ge, cphi_ge, fatt_spunto)
+                    st.success(f"S nominale = {r['S_nom_kVA']:.1f} kVA  →  S di spunto = {r['S_spunto_kVA']:.1f} kVA")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_ge == "Dimensiona gruppo":
+            st.markdown("**Carichi da alimentare:**")
+            n_car_ge = st.number_input("Numero carichi:", min_value=1, max_value=10, value=3, step=1, key="ge_ncar")
+            carichi = []
+            cols_ge = st.columns(int(n_car_ge))
+            for i in range(int(n_car_ge)):
+                with cols_ge[i]:
+                    c_val = st.number_input(f"Carico {i+1} [kW]", value=10.0, min_value=0.0, key=f"ge_c{i}")
+                    carichi.append(c_val)
+            col1, col2 = st.columns(2)
+            with col1:
+                cphi_g = st.number_input("cos phi medio:", value=0.85, min_value=0.1, max_value=1.0, key="ge_cphig")
+            with col2:
+                fc_g = st.number_input("Fattore di contemporaneità:", value=0.80, min_value=0.1, max_value=1.0, key="ge_fcg")
+            if st.button("Dimensiona Gruppo", key="ge_btn2"):
+                try:
+                    r = ge.dimensiona_gruppo(carichi, cphi_g, fc_g)
+                    c1, c2 = st.columns(2)
+                    c1.metric("Potenza gruppo", f"{r['P_gruppo_kW']:.1f} kW")
+                    c2.metric("Potenza apparente", f"{r['S_gruppo_kVA']:.1f} kVA")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                V_serb_ge = st.number_input("Volume serbatoio [L]:", value=500.0, min_value=1.0, key="ge_Vserb")
+                P_ge = st.number_input("Potenza gruppo [kW]:", value=50.0, min_value=1.0, key="ge_Pge")
+            with col2:
+                cons_spec = st.number_input("Consumo specifico [L/kWh]:", value=0.25, min_value=0.05, key="ge_cons")
+                fc_carico = st.number_input("Fattore di carico medio:", value=0.75, min_value=0.1, max_value=1.0, key="ge_fccarico")
+            if st.button("Calcola Autonomia", key="ge_btn3"):
+                try:
+                    r = ge.autonomia_serbatoio(V_serb_ge, P_ge, cons_spec, fc_carico)
+                    st.success(f"Autonomia: {r['t_autonomia_h']:.1f} ore  (consumo {r['consumo_orario_L']:.1f} L/h)")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+
+    elif tipo == "Quadro Elettrico — Dissipazione":
+        st.subheader("Potenza Dissipata e Ventilazione Quadri Elettrici (IEC 61439)")
+        sub_qe = st.radio("Calcolo:", ["Potenza dissipata componenti", "Verifica temperatura", "Ventilazione forzata"], horizontal=True, key="qe_sub")
+        if sub_qe == "Potenza dissipata componenti":
+            st.markdown("**Componenti installati:**")
+            n_comp = st.number_input("Numero componenti:", min_value=1, max_value=10, value=3, step=1, key="qe_ncomp")
+            componenti = {}
+            for i in range(int(n_comp)):
+                c1, c2 = st.columns(2)
+                with c1:
+                    nome_c = st.text_input(f"Nome componente {i+1}:", value=f"Componente {i+1}", key=f"qe_nome{i}")
+                with c2:
+                    p_c = st.number_input(f"Potenza dissipata [W]:", value=8.0, min_value=0.0, key=f"qe_p{i}")
+                componenti[nome_c] = p_c
+            if st.button("Somma Potenza Dissipata", key="qe_btn1"):
+                try:
+                    r = qe.potenza_dissipata_componenti(componenti)
+                    st.success(f"Potenza totale dissipata: {r['P_tot_W']:.1f} W  ({r['n_componenti']} componenti)")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+            st.caption("Valori tipici: " + "  |  ".join([f"**{k}**: {v} W" for k, v in qe.POTENZE_DISSIPATE_TIPICHE_W.items()]))
+        elif sub_qe == "Verifica temperatura":
+            col1, col2 = st.columns(2)
+            with col1:
+                P_diss_qe = st.number_input("Potenza dissipata totale [W]:", value=50.0, min_value=0.1, key="qe_Pdiss")
+                T_amb_qe = st.number_input("Temperatura ambiente [°C]:", value=30.0, key="qe_Tamb")
+            with col2:
+                L_qe = st.number_input("Larghezza quadro [m]:", value=0.6, min_value=0.1, key="qe_L")
+                H_qe = st.number_input("Altezza quadro [m]:", value=0.8, min_value=0.1, key="qe_H")
+                Pr_qe = st.number_input("Profondità quadro [m]:", value=0.3, min_value=0.1, key="qe_Pr")
+            a_parete = st.checkbox("Installato a parete", value=False, key="qe_aparete")
+            if st.button("Verifica Temperatura", key="qe_btn2"):
+                try:
+                    sup = qe.superficie_quadro(L_qe, H_qe, Pr_qe, a_parete)
+                    r = qe.verifica_temperatura_quadro(P_diss_qe, sup["A_tot_m2"], T_amb_qe)
+                    colore = "success" if r["conforme"] else "error"
+                    getattr(st, colore)(f"T interna stimata = {r['T_interna_C']:.1f} °C  (ΔT = {r['delta_T_K']:.1f} K)  —  {r['giudizio']}")
+                    st.caption(f"Superficie di scambio: {sup['A_tot_m2']:.2f} m²")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                P_diss_v = st.number_input("Potenza dissipata [W]:", value=200.0, min_value=0.1, key="qe_Pdissv")
+            with col2:
+                dT_max = st.number_input("ΔT massimo ammesso [K]:", value=15.0, min_value=1.0, key="qe_dTmax")
+            if st.button("Calcola Portata Ventilazione", key="qe_btn3"):
+                try:
+                    r = qe.portata_ventilazione_forzata(P_diss_v, dT_max)
+                    st.success(f"Portata aria necessaria: {r['Q_m3h']:.1f} m³/h")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+
+    elif tipo == "Rifasamento Condensatori":
+        st.subheader("Rifasamento con batterie di condensatori — IEC 60831")
+        col1, col2 = st.columns(2)
+        with col1:
+            P_rf = st.number_input("Potenza attiva P [kW]:", value=50.0, min_value=0.1, key="rf_P")
+            cphi_att = st.slider("cos_phi attuale:", 0.50, 0.99, 0.72, step=0.01, key="rf_cphi_att")
+        with col2:
+            cphi_tgt = st.slider("cos_phi target:", 0.80, 1.00, 0.95, step=0.01, key="rf_cphi_tgt")
+            V_rf = st.number_input("Tensione di rete [V]:", value=400.0, min_value=100.0, key="rf_V")
+        coll_rf = st.radio("Collegamento condensatori:", ["triangolo", "stella"], horizontal=True, key="rf_coll")
+        if st.button("Calcola Rifasamento", key="rf_btn"):
+            try:
+                ra = rifas.potenza_reattiva_attuale(P_rf, cphi_att)
+                rc = rifas.kvar_necessari(P_rf, cphi_att, cphi_tgt)
+                rcap = rifas.capacita_condensatori(rc["Q_c_kvar"], V_rf, coll_rf)
+                rv = rifas.verifica_rifasamento(P_rf, cphi_att, rc["Q_c_kvar"], V_rf)
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Q reattiva attuale", f"{ra['Q_kvar']:.1f} kvar")
+                c2.metric("Q_c necessaria", f"{rc['Q_c_kvar']:.1f} kvar")
+                c3.metric("Q_c arrotondato", f"{rc['Q_c_kvar_arrotondato']:.0f} kvar")
+                c4.metric("cos_phi risultante", f"{rv['cos_phi_risultante']:.3f}")
+                st.info(f"Capacità per fase ({coll_rf}): **{rcap['C_per_fase_uF']:.2f} µF** "
+                        f"| Corrente prima: {rv['I_prima_A']:.1f} A → dopo: {rv['I_dopo_A']:.1f} A "
+                        f"(riduzione {rv['riduzione_corrente_pct']:.1f}%)")
+                if rv["soddisfa_095"]:
+                    st.success("cos_phi ≥ 0.95 — obiettivo raggiunto")
+                else:
+                    st.warning("cos_phi < 0.95 — aumentare la batteria")
+            except ValueError as e:
+                st.error(str(e))
+
+    elif tipo == "Caduta Tensione BT (CEI 64-8)":
+        st.subheader("Caduta di tensione su cavo BT — CEI 64-8 / IEC 60364")
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo_cv = st.radio("Sistema:", ["trifase", "monofase"], horizontal=True, key="cdvbt_tipo")
+            P_cv = st.number_input("Potenza [kW]:", value=10.0, min_value=0.01, key="cdvbt_P")
+            V_cv = st.number_input("Tensione nominale [V]:", value=400.0 if "trifase" else 230.0, min_value=100.0, key="cdvbt_V")
+        with col2:
+            L_cv = st.number_input("Lunghezza cavo [m]:", value=50.0, min_value=0.1, key="cdvbt_L")
+            cphi_cv = st.slider("cos_phi:", 0.60, 1.00, 0.90, step=0.01, key="cdvbt_cphi")
+            cond_cv = st.radio("Conduttore:", ["rame", "alluminio"], horizontal=True, key="cdvbt_cond")
+        dv_max = st.slider("ΔV% massimo ammesso:", 1.0, 10.0, 3.0, step=0.5, key="cdvbt_dvmax")
+        if st.button("Calcola Caduta Tensione", key="cdvbt_btn"):
+            try:
+                if tipo_cv == "trifase":
+                    r = cadbt.caduta_tensione_trifase(P_cv * 1000.0 / (1.732 * V_cv * cphi_cv), L_cv,
+                                                      cadbt.SEZIONI_NORMALIZZATE_MM2[5], cphi_cv, cond_cv)
+                    rs = cadbt.sezione_da_caduta_max(P_cv, V_cv, L_cv, dv_max, cphi_cv, "trifase", cond_cv)
+                else:
+                    r = cadbt.caduta_tensione_monofase(P_cv * 1000.0 / (V_cv * cphi_cv), L_cv,
+                                                       cadbt.SEZIONI_NORMALIZZATE_MM2[5], cphi_cv, cond_cv)
+                    rs = cadbt.sezione_da_caduta_max(P_cv, V_cv, L_cv, dv_max, cphi_cv, "monofase", cond_cv)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Sezione minima calcolata", f"{rs['S_mm2_calcolata']:.2f} mm²")
+                c2.metric("Sezione normalizzata", f"{rs['S_mm2_normalizzata']:.0f} mm²")
+                c3.metric("Corrente", f"{rs['I_A']:.1f} A")
+                rv2 = (cadbt.caduta_tensione_trifase(rs["I_A"], L_cv, rs["S_mm2_normalizzata"], cphi_cv, cond_cv)
+                       if tipo_cv == "trifase"
+                       else cadbt.caduta_tensione_monofase(rs["I_A"], L_cv, rs["S_mm2_normalizzata"], cphi_cv, cond_cv))
+                st.info(f"Con {rs['S_mm2_normalizzata']:.0f} mm² ({cond_cv}): "
+                        f"ΔV = {rv2['dV_V']:.2f} V = **{rv2['dV_pct']:.2f}%**")
+                (st.success if rv2["conforme_3pct"] else st.warning)(rv2["giudizio"])
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
+    elif tipo == "Avviamento Motore Asincrono":
+        st.subheader("Avviamento motore asincrono trifase")
+        col1, col2 = st.columns(2)
+        with col1:
+            P_av = st.number_input("Potenza nominale [kW]:", value=11.0, min_value=0.1, key="av_P")
+            V_av = st.number_input("Tensione [V]:", value=400.0, min_value=100.0, key="av_V")
+            n_av = st.number_input("Velocità nominale [RPM]:", value=1450.0, min_value=1.0, key="av_n")
+        with col2:
+            cl_av = st.selectbox("Classe avviamento:", list(avv.CLASSI_AVVIAMENTO.keys()), key="av_cl")
+            cphi_av = st.slider("cos_phi nominale:", 0.60, 1.00, 0.86, step=0.01, key="av_cphi")
+            eta_av = st.slider("Rendimento η:", 0.80, 1.00, 0.93, step=0.01, key="av_eta")
+        Z_rete = st.number_input("Impedenza di rete Z [mΩ]:", value=10.0, min_value=0.1, key="av_Z",
+                                  help="Impedenza vista dal punto di allacciamento — tipicamente 5-20 mΩ")
+        if st.button("Calcola Avviamento", key="av_btn"):
+            try:
+                info_cl = avv.CLASSI_AVVIAMENTO[cl_av]
+                rc = avv.correnti_motore(P_av, V_av, cphi_av, eta_av, info_cl["Ia_In"])
+                rm = avv.coppia_motore(P_av, n_av, info_cl["Ma_Mn"])
+                rdv = avv.caduta_tensione_avviamento(rc["I_avviamento_A"], Z_rete, V_av)
+                rmet = avv.metodi_avviamento(P_av, V_av, cphi_av, eta_av)
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("I nominale", f"{rc['I_nominale_A']:.1f} A")
+                c2.metric("I avviamento", f"{rc['I_avviamento_A']:.0f} A")
+                c3.metric("M nominale", f"{rm['M_nominale_Nm']:.1f} N·m")
+                c4.metric("M avviamento", f"{rm['M_avviamento_Nm']:.1f} N·m")
+                st.info(f"Caduta di tensione spunto: {rdv['dV_V']:.1f} V = {rdv['dV_pct']:.1f}%  |  {rdv['giudizio']}")
+                st.subheader("Confronto metodi di avviamento")
+                rows = []
+                for nome, val in rmet["metodi"].items():
+                    rows.append({"Metodo": nome, "I_avv [A]": f"{val['I_avviamento_A']:.0f}",
+                                 "× I_n": f"{val['fattore_corrente']:.1f}",
+                                 "Coppia": f"{val['fattore_coppia']:.2f} × M_n", "Note": val["note"]})
+                st.table(rows)
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
     elif tipo == "Motore Asincrono — Dati di Targa":
         st.subheader("Grandezze elettromeccaniche da dati di targa")
         col1, col2, col3 = st.columns(3)
@@ -1569,10 +1997,17 @@ elif categoria == "🔩  Meccanica":
             "Verifica a Flessione",
             "Trazione / Compressione",
             "Perdite di Carico Concentrate",
+            "Perdite di Carico Distribuite (Darcy-Weisbach)",
             "Bulloneria — Serraggio",
             "Bulloneria — Verifica",
             "Bulloneria — Flangia",
             "Nastri Trasportatori",
+            "Cuscinetti — Durata L10 (ISO 281)",
+            "Molle Meccaniche",
+            "Ruote Dentate — Verifica Lewis",
+            "Alberi — Torsione e Flessione",
+            "Saldature a Cordone d'Angolo",
+            "Tubazione in Pressione (EN 13480)",
         ],
         key="mec_tool",
     )
@@ -1911,6 +2346,42 @@ elif categoria == "🔩  Meccanica":
             except ValueError as e:
                 st.error(str(e))
 
+    elif tool_mec == "Perdite di Carico Distribuite (Darcy-Weisbach)":
+        st.subheader("Perdite di Carico Distribuite — Equazione di Darcy-Weisbach")
+        col1, col2 = st.columns(2)
+        with col1:
+            Q_dw = st.number_input("Portata Q [m³/h]:", value=50.0, min_value=0.01, key="dw_Q")
+            D_dw = st.number_input("Diametro interno D [mm]:", value=100.0, min_value=1.0, key="dw_D")
+            L_dw = st.number_input("Lunghezza tubazione L [m]:", value=100.0, min_value=0.1, key="dw_L")
+        with col2:
+            mat_dw = st.selectbox("Materiale tubazione:", list(pcd.RUGOSITA_MATERIALI_MM.keys()), key="dw_mat")
+            rug_dw = pcd.RUGOSITA_MATERIALI_MM[mat_dw]
+            st.info(f"Rugosità: {rug_dw} mm")
+            rho_dw = st.number_input("Densità fluido [kg/m³]:", value=1000.0, min_value=1.0, key="dw_rho")
+        if st.button("Calcola Perdita Distribuita", key="dw_btn"):
+            try:
+                r = pcd.perdita_distribuita(Q_dw, D_dw, L_dw, rug_dw, 1.0e-6, rho_dw)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Velocità", f"{r['v_ms']:.2f} m/s")
+                c2.metric("ΔP", f"{r['dP_bar']:.4f} bar")
+                c3.metric("Perdita h", f"{r['h_perdita_m']:.3f} m")
+                st.info(f"Re = {r['Re']:.0f}  ({r['regime']})  |  f Darcy = {r['f_darcy']:.4f}  |  ΔP = {r['dP_kPa']:.2f} kPa")
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+        st.markdown("---")
+        st.markdown("**Pre-dimensionamento diametro da velocità massima:**")
+        col3, col4 = st.columns(2)
+        with col3:
+            Q_dim = st.number_input("Portata Q [m³/h]:", value=50.0, min_value=0.01, key="dw_Qdim")
+        with col4:
+            v_max_dim = st.number_input("Velocità massima consigliata [m/s]:", value=2.0, min_value=0.1, key="dw_vmax")
+        if st.button("Calcola Diametro Minimo", key="dw_btn2"):
+            try:
+                r = pcd.diametro_da_velocita_max(Q_dim, v_max_dim)
+                st.success(f"Diametro minimo: {r['D_minimo_mm']:.1f} mm")
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
     elif tool_mec == "Bulloneria — Serraggio":
         st.subheader("Precarico e coppia di serraggio (VDI 2230 — metodo semplificato)")
         col1, col2, col3 = st.columns(3)
@@ -2057,6 +2528,344 @@ elif categoria == "🔩  Meccanica":
                 except ValueError as e:
                     st.error(str(e))
 
+    elif tool_mec == "Cuscinetti — Durata L10 (ISO 281)":
+        st.subheader("Durata a Fatica Cuscinetti a Rotolamento (ISO 281)")
+        col1, col2 = st.columns(2)
+        with col1:
+            C_cus = st.number_input("Capacità di carico dinamico C [kN]:", value=25.0, min_value=0.1, key="cus_C")
+            P_cus = st.number_input("Carico dinamico equivalente P [kN]:", value=5.0, min_value=0.1, key="cus_P")
+        with col2:
+            tipo_cus = st.selectbox("Tipo cuscinetto:", ["sfere", "rulli"], key="cus_tipo")
+            n_cus = st.number_input("Velocità di rotazione n [RPM]:", value=1500.0, min_value=1.0, key="cus_n")
+        if st.button("Calcola Durata", key="cus_btn1"):
+            try:
+                r1 = cus.durata_l10(C_cus, P_cus, tipo_cus)
+                r2 = cus.durata_ore(r1["L10_milioni_giri"], n_cus)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("L10", f"{r1['L10_milioni_giri']:.1f} milioni giri")
+                c2.metric("L10h", f"{r2['L10h']:.0f} ore")
+                c3.metric("Anni (8h/die, 250gg)", f"{r2['L10h_anni_8h_die_250gg']:.1f}")
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+        st.markdown("---")
+        st.markdown("**Carico dinamico equivalente (ciclo variabile):**")
+        n_fasi_cus = st.number_input("Numero fasi di carico:", min_value=1, max_value=6, value=2, step=1, key="cus_nfasi")
+        forze_cus, frazioni_cus = [], []
+        for i in range(int(n_fasi_cus)):
+            c1, c2 = st.columns(2)
+            with c1:
+                F_i = st.number_input(f"Carico fase {i+1} [kN]:", value=5.0, min_value=0.01, key=f"cus_F{i}")
+            with c2:
+                q_i = st.number_input(f"Frazione tempo fase {i+1}:", value=round(1.0/n_fasi_cus, 2), min_value=0.0, max_value=1.0, key=f"cus_q{i}")
+            forze_cus.append(F_i)
+            frazioni_cus.append(q_i)
+        if st.button("Calcola Carico Equivalente", key="cus_btn2"):
+            try:
+                r = cus.carico_dinamico_equivalente(forze_cus, frazioni_cus, 3.0 if tipo_cus == "sfere" else 10.0/3.0)
+                st.success(f"Carico dinamico equivalente P_eq = {r['P_eq_kN']:.2f} kN")
+            except (ValueError, ZeroDivisionError) as e:
+                st.error(str(e))
+
+    elif tool_mec == "Molle Meccaniche":
+        st.subheader("Dimensionamento Molle Meccaniche")
+        sub_molle = st.radio("Calcolo:", ["Compressione/Trazione", "Tensione torsionale", "Frequenza naturale", "Molla di torsione"], horizontal=True, key="molle_sub")
+        if sub_molle == "Compressione/Trazione":
+            col1, col2 = st.columns(2)
+            with col1:
+                d_molla = st.number_input("Diametro filo d [mm]:", value=2.0, min_value=0.1, key="molle_d")
+                D_molla = st.number_input("Diametro medio spira D [mm]:", value=20.0, min_value=0.5, key="molle_D")
+            with col2:
+                n_molla = st.number_input("Numero spire attive n:", value=10.0, min_value=1.0, key="molle_n")
+                mat_molla = st.selectbox("Materiale:", list(molle.MATERIALI_MOLLE.keys()), key="molle_mat")
+                G_molla = molle.MATERIALI_MOLLE[mat_molla]
+            if st.button("Calcola Costante Elastica", key="molle_btn1"):
+                try:
+                    r = molle.molla_compressione(d_molla, D_molla, n_molla, G_molla)
+                    c1, c2 = st.columns(2)
+                    c1.metric("k", f"{r['k_N_mm']:.3f} N/mm")
+                    c2.metric("Indice molla C", f"{r['indice_molla_C']:.1f}")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_molle == "Tensione torsionale":
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                F_molla = st.number_input("Forza applicata F [N]:", value=100.0, min_value=0.1, key="molle_F")
+            with col2:
+                d_t = st.number_input("Diametro filo d [mm]:", value=2.0, min_value=0.1, key="molle_dt")
+            with col3:
+                D_t = st.number_input("Diametro medio D [mm]:", value=20.0, min_value=0.5, key="molle_Dt")
+            if st.button("Calcola Tensione", key="molle_btn2"):
+                try:
+                    r = molle.tensione_torsionale_molla(F_molla, d_t, D_t)
+                    st.success(f"τ = {r['tau_MPa']:.1f} MPa  (fattore di Wahl Kw = {r['Kw_wahl']:.3f})")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_molle == "Frequenza naturale":
+            col1, col2 = st.columns(2)
+            with col1:
+                k_freq = st.number_input("Costante elastica k [N/mm]:", value=2.0, min_value=0.01, key="molle_kfreq")
+            with col2:
+                m_freq = st.number_input("Massa applicata [kg]:", value=1.0, min_value=0.001, key="molle_mfreq")
+            if st.button("Calcola Frequenza", key="molle_btn3"):
+                try:
+                    r = molle.frequenza_naturale_molla(k_freq, m_freq)
+                    st.success(f"Frequenza naturale f = {r['f_Hz']:.2f} Hz  (ω = {r['omega_rad_s']:.2f} rad/s)")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                d_tor = st.number_input("Diametro filo d [mm]:", value=2.0, min_value=0.1, key="molle_dtor")
+                D_tor = st.number_input("Diametro medio D [mm]:", value=20.0, min_value=0.5, key="molle_Dtor")
+            with col2:
+                n_tor = st.number_input("Numero spire attive n:", value=10.0, min_value=1.0, key="molle_ntor")
+            if st.button("Calcola Costante Angolare", key="molle_btn4"):
+                try:
+                    r = molle.molla_torsione(d_tor, D_tor, n_tor)
+                    st.success(f"k_θ = {r['k_theta_Nmm_rad']:.2f} N·mm/rad  ({r['k_theta_Nmm_grad']:.2f} N·mm/grado)")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+
+    elif tool_mec == "Ruote Dentate — Verifica Lewis":
+        st.subheader("Ruote Dentate — Geometria e Verifica a Flessione (Lewis)")
+        sub_rd = st.radio("Calcolo:", ["Geometria ruota", "Modulo minimo (Lewis)", "Verifica a flessione", "Rapporto di trasmissione"], horizontal=True, key="rd_sub")
+        if sub_rd == "Geometria ruota":
+            col1, col2 = st.columns(2)
+            with col1:
+                m_rd = st.number_input("Modulo m [mm]:", value=3.0, min_value=0.1, key="rd_m")
+            with col2:
+                z_rd = st.number_input("Numero denti z:", value=20, min_value=1, step=1, key="rd_z")
+            if st.button("Calcola Geometria", key="rd_btn1"):
+                try:
+                    r = rd.geometria_ruota(m_rd, int(z_rd))
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("d primitivo", f"{r['d_primitivo_mm']:.1f} mm")
+                    c2.metric("d esterno", f"{r['d_esterno_mm']:.1f} mm")
+                    c3.metric("d interno", f"{r['d_interno_mm']:.1f} mm")
+                    st.info(f"Passo = {r['passo_mm']:.2f} mm")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_rd == "Modulo minimo (Lewis)":
+            col1, col2 = st.columns(2)
+            with col1:
+                T_rd = st.number_input("Coppia trasmessa T [N·m]:", value=50.0, min_value=0.1, key="rd_T")
+                z_min = st.number_input("Numero denti z:", value=20, min_value=1, step=1, key="rd_zmin")
+            with col2:
+                bm_rd = st.number_input("Rapporto b/m:", value=10.0, min_value=4.0, max_value=16.0, key="rd_bm")
+                sigma_rd = st.number_input("Tensione ammissibile [MPa]:", value=200.0, min_value=10.0, key="rd_sigma")
+            if st.button("Calcola Modulo Minimo", key="rd_btn2"):
+                try:
+                    r = rd.modulo_minimo_lewis(T_rd, int(z_min), bm_rd, sigma_rd)
+                    st.success(f"Modulo minimo richiesto: {r['m_minimo_mm']:.2f} mm  (forza tangenziale stimata {r['Ft_stimata_N']:.0f} N)")
+                    st.caption("Arrotondare al modulo normalizzato superiore (es. 1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10...).")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_rd == "Verifica a flessione":
+            col1, col2 = st.columns(2)
+            with col1:
+                T_vf = st.number_input("Coppia trasmessa T [N·m]:", value=50.0, min_value=0.1, key="rd_Tvf")
+                m_vf = st.number_input("Modulo m [mm]:", value=3.0, min_value=0.1, key="rd_mvf")
+            with col2:
+                z_vf = st.number_input("Numero denti z:", value=20, min_value=1, step=1, key="rd_zvf")
+                b_vf = st.number_input("Larghezza fascia b [mm]:", value=24.0, min_value=1.0, key="rd_bvf")
+            Y_sel = st.selectbox("Fattore di Lewis Y (per numero denti):", list(rd.FATTORI_LEWIS_Y.keys()), index=2, key="rd_Ysel")
+            Y_val = rd.FATTORI_LEWIS_Y[Y_sel]
+            if st.button("Verifica Flessione", key="rd_btn3"):
+                try:
+                    r = rd.verifica_flessione_lewis(T_vf, m_vf, int(z_vf), b_vf, Y_val)
+                    c1, c2 = st.columns(2)
+                    c1.metric("Forza tangenziale Ft", f"{r['Ft_N']:.0f} N")
+                    c2.metric("Tensione flessione σ", f"{r['sigma_flessione_MPa']:.1f} MPa")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                z1_rd = st.number_input("Denti pignone z1:", value=20, min_value=1, step=1, key="rd_z1")
+            with col2:
+                z2_rd = st.number_input("Denti ruota z2:", value=60, min_value=1, step=1, key="rd_z2")
+            if st.button("Calcola Rapporto", key="rd_btn4"):
+                try:
+                    r = rd.rapporto_trasmissione_ruote(int(z1_rd), int(z2_rd))
+                    st.success(f"τ = {r['tau']:.3f}  ({'Riduzione' if r['riduzione'] else 'Moltiplica'})")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+
+    elif tool_mec == "Alberi — Torsione e Flessione":
+        st.subheader("Alberi — Verifica a torsione, flessione e fatica (Goodman)")
+        sub_alb = st.radio("Calcolo:", ["Momento torcente", "Diametro minimo", "Tensioni sezione", "Fatica — Goodman"], horizontal=True, key="alb_sub")
+        mat_alb = st.selectbox("Materiale albero:", list(alb.MATERIALI_ALBERI.keys()), key="alb_mat")
+        props = alb.MATERIALI_ALBERI[mat_alb]
+        if sub_alb == "Momento torcente":
+            col1, col2 = st.columns(2)
+            with col1:
+                P_alb = st.number_input("Potenza P [kW]:", value=15.0, min_value=0.01, key="alb_P")
+            with col2:
+                n_alb = st.number_input("Velocità n [RPM]:", value=1450.0, min_value=1.0, key="alb_n")
+            if st.button("Calcola Mt", key="alb_btn1"):
+                try:
+                    r = alb.momento_torcente(P_alb, n_alb)
+                    st.success(f"Momento torcente: **{r['Mt_Nm']:.2f} N·m**")
+                except ValueError as e:
+                    st.error(str(e))
+        elif sub_alb == "Diametro minimo":
+            col1, col2 = st.columns(2)
+            with col1:
+                Mt_alb = st.number_input("Momento torcente Mt [N·m]:", value=100.0, min_value=0.01, key="alb_Mt")
+            with col2:
+                tau_alb = st.number_input("Tensione ammissibile τ [MPa]:", value=float(props["Re_MPa"] // 3), min_value=1.0, key="alb_tau")
+            if st.button("Calcola Diametro", key="alb_btn2"):
+                try:
+                    r = alb.diametro_minimo_torsione(Mt_alb, tau_alb)
+                    st.success(f"d_min = {r['d_min_mm']:.2f} mm → normalizzato: **{r['d_normalizzato_mm']} mm**")
+                except ValueError as e:
+                    st.error(str(e))
+        elif sub_alb == "Tensioni sezione":
+            col1, col2 = st.columns(2)
+            with col1:
+                Mt_ts = st.number_input("Momento torcente Mt [N·m]:", value=100.0, min_value=0.0, key="alb_Mt_ts")
+                Mf_ts = st.number_input("Momento flettente Mf [N·m]:", value=80.0, min_value=0.0, key="alb_Mf_ts")
+            with col2:
+                d_ts = st.number_input("Diametro albero d [mm]:", value=40.0, min_value=1.0, key="alb_d_ts")
+            if st.button("Verifica Tensioni", key="alb_btn3"):
+                try:
+                    r = alb.fattore_sicurezza_statico(Mt_ts, Mf_ts, d_ts, props["Re_MPa"])
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("τ torsione", f"{r['tau_MPa']:.1f} MPa")
+                    c2.metric("σ flessione", f"{r['sigma_flessione_MPa']:.1f} MPa")
+                    c3.metric("σ eq (Von Mises)", f"{r['sigma_eq_MPa']:.1f} MPa")
+                    c4.metric("n statico", f"{r['n_statico']:.2f}")
+                    (st.success if r["conforme"] else st.error)(r["giudizio"])
+                except ValueError as e:
+                    st.error(str(e))
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                sm_gm = st.number_input("σ medio σ_m [MPa]:", value=120.0, min_value=0.0, key="alb_sm")
+                sa_gm = st.number_input("σ alternato σ_a [MPa]:", value=80.0, min_value=0.0, key="alb_sa")
+            with col2:
+                Rm_gm = st.number_input("Resistenza a rottura Rm [MPa]:", value=float(props["Rm_MPa"]), min_value=100.0, key="alb_Rm")
+                sf_gm = st.number_input("Limite fatica σ_f [MPa]:", value=float(props["sigma_f_MPa"]), min_value=50.0, key="alb_sf")
+            if st.button("Verifica Goodman", key="alb_btn4"):
+                try:
+                    r = alb.verifica_goodman(sm_gm, sa_gm, Rm_gm, sf_gm)
+                    c1, c2 = st.columns(2)
+                    c1.metric("n Goodman", f"{r['n_Goodman']:.2f}")
+                    c2.metric("n Gerber", f"{r['n_Gerber']:.2f}")
+                    (st.success if r["conforme_goodman"] else st.error)(r["giudizio"])
+                except ValueError as e:
+                    st.error(str(e))
+
+    elif tool_mec == "Saldature a Cordone d'Angolo":
+        st.subheader("Saldature a cordone d'angolo — EN 1993-1-8 (Eurocodice 3)")
+        acciaio_s = st.selectbox("Acciaio base:", list(sald.FU_MPa.keys()), key="sald_acc")
+        sub_sald = st.radio("Verifica:", ["Taglio puro (forza parallela)", "Carico normale (forza perp.)", "Gola minima"], horizontal=True, key="sald_sub")
+        if sub_sald == "Taglio puro (forza parallela)":
+            col1, col2 = st.columns(2)
+            with col1:
+                F_sald = st.number_input("Forza di taglio F [kN]:", value=30.0, min_value=0.01, key="sald_F")
+                a_sald = st.number_input("Gola cordone a [mm]:", value=5.0, min_value=1.0, key="sald_a")
+            with col2:
+                L_sald = st.number_input("Lunghezza cordone L [mm]:", value=100.0, min_value=5.0, key="sald_L")
+            if st.button("Verifica Cordone", key="sald_btn1"):
+                try:
+                    r = sald.verifica_cordone_taglio(F_sald, a_sald, L_sald, acciaio_s)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("A gola", f"{r['A_gola_mm2']:.0f} mm²")
+                    c2.metric("τ par", f"{r['tau_par_MPa']:.1f} MPa")
+                    c3.metric("Utilizzazione", f"{r['utilizzazione']*100:.1f}%")
+                    (st.success if r["conforme"] else st.error)(r["giudizio"])
+                except ValueError as e:
+                    st.error(str(e))
+        elif sub_sald == "Carico normale (forza perp.)":
+            col1, col2 = st.columns(2)
+            with col1:
+                F_sn = st.number_input("Forza normale F [kN]:", value=20.0, min_value=0.01, key="sald_Fn")
+                a_sn = st.number_input("Gola cordone a [mm]:", value=5.0, min_value=1.0, key="sald_an")
+            with col2:
+                L_sn = st.number_input("Lunghezza cordone L [mm]:", value=100.0, min_value=5.0, key="sald_Ln")
+            if st.button("Verifica Cordone Normale", key="sald_btn2"):
+                try:
+                    r = sald.verifica_cordone_normale(F_sn, a_sn, L_sn, acciaio=acciaio_s)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("σ perp", f"{r['sigma_perp_MPa']:.1f} MPa")
+                    c2.metric("τ perp", f"{r['tau_perp_MPa']:.1f} MPa")
+                    c3.metric("Utilizzazione", f"{r['utilizzazione']*100:.1f}%")
+                    (st.success if r["conforme"] else st.error)(r["giudizio"])
+                except ValueError as e:
+                    st.error(str(e))
+        else:
+            t_sald = st.number_input("Spessore minimo dei pezzi [mm]:", value=10.0, min_value=1.0, key="sald_t")
+            if st.button("Calcola Gola Minima", key="sald_btn3"):
+                try:
+                    r = sald.gola_minima(t_sald)
+                    st.success(f"Gola minima a_min = **{r['a_min_mm']:.1f} mm** (per t = {r['t_pezzi_mm']:.0f} mm)")
+                    ra = sald.resistenza_ammissibile_cordone(acciaio_s)
+                    st.info(f"Resistenza cordone {acciaio_s}: f_vw,d = {ra['f_vwd_MPa']:.1f} MPa")
+                except ValueError as e:
+                    st.error(str(e))
+
+    elif tool_mec == "Tubazione in Pressione (EN 13480)":
+        st.subheader("Spessore minimo tubazione in pressione — EN 13480-3 / ASME B31.3")
+        sub_tub = st.radio("Calcolo:", ["Spessore minimo", "Pressione ammissibile", "Verifica spessore esistente"], horizontal=True, key="tub_sub")
+        mat_tub = st.selectbox("Materiale:", list(tubp.MATERIALI_TUBI.keys()), key="tub_mat")
+        props_tub = tubp.MATERIALI_TUBI[mat_tub]
+        if sub_tub == "Spessore minimo":
+            col1, col2 = st.columns(2)
+            with col1:
+                P_tub = st.number_input("Pressione esercizio P [bar]:", value=10.0, min_value=0.1, key="tub_P")
+                DN_sel = st.selectbox("DN nominale:", list(tubp.TABELLA_DN_DO_MM.keys()), index=4, key="tub_DN")
+                Do_tub = tubp.TABELLA_DN_DO_MM[DN_sel]
+                st.info(f"D esterno: {Do_tub} mm")
+            with col2:
+                f_tub = st.number_input("Tensione ammissibile f [MPa]:", value=float(props_tub["f_MPa"]), min_value=10.0, key="tub_f")
+                c_tub = st.number_input("Sovraspessore corrosione c [mm]:", value=1.0, min_value=0.0, key="tub_c")
+                E_tub = st.slider("Coefficiente giuntura E:", 0.60, 1.00, 1.00, step=0.05, key="tub_E")
+            if st.button("Calcola Spessore", key="tub_btn1"):
+                try:
+                    r = tubp.spessore_minimo(P_tub, Do_tub, f_tub, E_tub, c_tub)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("t calcolato", f"{r['t_calc_mm']:.2f} mm")
+                    c2.metric("t minimo (+ corros.)", f"{r['t_min_mm']:.2f} mm")
+                    c3.metric("t normalizzato", f"{r['t_normalizzato_mm']:.1f} mm")
+                    st.info(f"D interno con t adottato: {r['D_interno_mm']:.1f} mm")
+                except ValueError as e:
+                    st.error(str(e))
+        elif sub_tub == "Pressione ammissibile":
+            col1, col2 = st.columns(2)
+            with col1:
+                t_exist = st.number_input("Spessore esistente t [mm]:", value=3.2, min_value=0.5, key="tub_texist")
+                DN_sel2 = st.selectbox("DN nominale:", list(tubp.TABELLA_DN_DO_MM.keys()), index=4, key="tub_DN2")
+                Do_tub2 = tubp.TABELLA_DN_DO_MM[DN_sel2]
+            with col2:
+                f_tub2 = st.number_input("Tensione ammissibile f [MPa]:", value=float(props_tub["f_MPa"]), min_value=10.0, key="tub_f2")
+                c_tub2 = st.number_input("Sovraspessore corrosione c [mm]:", value=1.0, min_value=0.0, key="tub_c2")
+            if st.button("Calcola P_ammissibile", key="tub_btn2"):
+                try:
+                    r = tubp.pressione_ammissibile(t_exist, Do_tub2, f_tub2, c_corrosione_mm=c_tub2)
+                    st.success(f"Pressione ammissibile: **{r['P_amm_bar']:.2f} bar** ({r['P_amm_MPa']:.3f} MPa)")
+                except ValueError as e:
+                    st.error(str(e))
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                P_vt = st.number_input("Pressione esercizio P [bar]:", value=10.0, min_value=0.1, key="tub_Pvt")
+                DN_vt = st.selectbox("DN:", list(tubp.TABELLA_DN_DO_MM.keys()), index=4, key="tub_DNvt")
+                Do_vt = tubp.TABELLA_DN_DO_MM[DN_vt]
+            with col2:
+                t_vt = st.number_input("Spessore adottato t [mm]:", value=4.0, min_value=0.5, key="tub_tvt")
+                f_vt = st.number_input("Tensione ammissibile f [MPa]:", value=float(props_tub["f_MPa"]), min_value=10.0, key="tub_fvt")
+            if st.button("Verifica Spessore", key="tub_btn3"):
+                try:
+                    r = tubp.verifica_tubazione(P_vt, Do_vt, t_vt, f_vt)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("t minimo richiesto", f"{r['t_min_mm']:.2f} mm")
+                    c2.metric("t adottato", f"{r['t_adottato_mm']:.1f} mm")
+                    c3.metric("Utilizzazione", f"{r['utilizzazione']*100:.1f}%")
+                    (st.success if r["conforme"] else st.error)(r["giudizio"])
+                except ValueError as e:
+                    st.error(str(e))
+
 
 elif categoria == "🔧  Pneumatica & Strumenti":
     _card_open("strum", "🔧 Pneumatica & Strumentazione", "IEC 60751 / NIST ITS-90")
@@ -2072,6 +2881,7 @@ elif categoria == "🔧  Pneumatica & Strumenti":
             "Pt100 — Temperatura ↔ Resistenza",
             "Errore di Misura e Incertezza",
             "Valvola di Controllo Cv/Kv",
+            "Trasduttore di Pressione 4-20mA",
         ],
         key="strum_tool",
     )
@@ -2281,6 +3091,68 @@ elif categoria == "🔧  Pneumatica & Strumenti":
                 except (ValueError, ZeroDivisionError) as e:
                     st.error(str(e))
 
+    elif tool_strum == "Trasduttore di Pressione 4-20mA":
+        st.subheader("Trasduttore di Pressione con Uscita 4-20 mA")
+        sub_tp = st.radio("Calcolo:", ["mA → Pressione", "Pressione → mA", "Errore di misura", "Caduta tensione loop"], horizontal=True, key="tp_sub")
+        if sub_tp == "mA → Pressione":
+            col1, col2 = st.columns(2)
+            with col1:
+                I_tp = st.number_input("Corrente misurata [mA]:", value=12.0, min_value=4.0, max_value=20.0, key="tp_I")
+            with col2:
+                FS_tp = st.selectbox("Fondo scala trasduttore [bar]:", tp.RANGE_COMMERCIALI_BAR, index=1, key="tp_FS")
+            if st.button("Convertiti in Pressione", key="tp_btn1"):
+                try:
+                    r = tp.ma_a_pressione(I_tp, FS_tp)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Pressione", f"{r['P_bar']:.3f} bar")
+                    c2.metric("Pressione", f"{r['P_kPa']:.1f} kPa")
+                    c3.metric("% Fondo Scala", f"{r['percentuale_FS']:.1f} %")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_tp == "Pressione → mA":
+            col1, col2 = st.columns(2)
+            with col1:
+                FS_tp2 = st.selectbox("Fondo scala trasduttore [bar]:", tp.RANGE_COMMERCIALI_BAR, index=1, key="tp_FS2")
+            with col2:
+                P_tp = st.number_input("Pressione [bar]:", value=10.0, min_value=0.0, key="tp_P")
+            if st.button("Convertiti in mA", key="tp_btn2"):
+                try:
+                    r = tp.pressione_a_ma(P_tp, FS_tp2)
+                    st.success(f"Corrente: {r['I_mA']:.2f} mA  ({r['percentuale_FS']:.1f} % FS)")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_tp == "Errore di misura":
+            col1, col2 = st.columns(2)
+            with col1:
+                I_mis = st.number_input("Corrente misurata [mA]:", value=12.2, min_value=4.0, max_value=20.0, key="tp_Imis")
+                I_teo = st.number_input("Corrente teorica [mA]:", value=12.0, min_value=4.0, max_value=20.0, key="tp_Iteo")
+            with col2:
+                FS_err = st.selectbox("Fondo scala [bar]:", tp.RANGE_COMMERCIALI_BAR, index=1, key="tp_FSerr")
+                acc_err = st.number_input("Accuratezza dichiarata [% FS]:", value=0.5, min_value=0.01, key="tp_acc")
+            if st.button("Calcola Errore", key="tp_btn3"):
+                try:
+                    r = tp.errore_misura_trasduttore(I_mis, I_teo, FS_err, acc_err)
+                    colore = "success" if r["entro_accuratezza"] else "error"
+                    getattr(st, colore)(f"Errore = {r['errore_pct_FS']:.3f} % FS  ({r['errore_bar']:.4f} bar)  —  {r['giudizio']}")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                R_loop = st.number_input("Resistenza di carico (shunt/PLC) [Ω]:", value=250.0, min_value=0.0, key="tp_Rloop")
+                L_loop = st.number_input("Lunghezza cavo [m]:", value=100.0, min_value=1.0, key="tp_Lloop")
+            with col2:
+                S_loop = st.number_input("Sezione cavo [mm²]:", value=0.75, min_value=0.1, key="tp_Sloop")
+                V_loop = st.number_input("Tensione alimentazione [V]:", value=24.0, min_value=12.0, key="tp_Vloop")
+            if st.button("Verifica Loop", key="tp_btn4"):
+                try:
+                    r = tp.caduta_tensione_loop_4_20(R_loop, L_loop, S_loop, V_loop)
+                    colore = "success" if r["sufficiente"] else "error"
+                    getattr(st, colore)(f"Tensione residua al trasduttore: {r['V_residua_trasduttore_V']:.2f} V  —  {r['giudizio']}")
+                    st.caption(f"R cavo = {r['R_cavo_ohm']:.2f} Ω  |  Caduta su cavo = {r['V_caduta_cavo_V']:.2f} V  |  Caduta su carico = {r['V_caduta_carico_V']:.2f} V")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+
 
 elif categoria == "🌡️  Termotecnica & Impianti":
     _card_open("termo", "🌡️ Termotecnica & Impianti", "EN 12464-1 / ISO 15547")
@@ -2298,6 +3170,7 @@ elif categoria == "🌡️  Termotecnica & Impianti":
             "Isolamento Termico — Tubo Cilindrico",
             "Serbatoi — Volume e Pressione",
             "Serbatoi — Svuotamento (Torricelli)",
+            "Condotte Aria HVAC",
         ],
         key="termo_tool",
     )
@@ -2503,7 +3376,7 @@ elif categoria == "🌡️  Termotecnica & Impianti":
                 c1, c2, c3 = st.columns(3)
                 c1.metric("U [W/m²K]", f"{r['U_W_m2K']:.3f}")
                 c2.metric("q [W/m²]", f"{r['q_W_m2']:.1f}")
-                c3.metric("R_tot [m²K/W]", f"{r['R_tot_m2K_W']:.3f}")
+                c3.metric("R_tot [m²K/W]", f"{r['R_tot_m2KW']:.3f}")
                 T_ifaces = r.get("T_interfaces", [])
                 if T_ifaces:
                     st.markdown("**Temperature alle interfacce:**")
@@ -2609,6 +3482,83 @@ elif categoria == "🌡️  Termotecnica & Impianti":
             except (ValueError, ZeroDivisionError) as e:
                 st.error(str(e))
 
+    elif tool_termo == "Condotte Aria HVAC":
+        st.subheader("Condotte Aria HVAC — Darcy-Weisbach")
+        sub_hvac = st.radio("Calcolo:", ["Perdita di carico (circolare)", "Perdita di carico (rettangolare)", "Dimensionamento circolare", "Dimensionamento rettangolare"], horizontal=True, key="hvac_sub")
+        T_hvac = st.slider("Temperatura aria [°C]:", -10, 60, 20, key="hvac_T")
+        if sub_hvac == "Perdita di carico (circolare)":
+            col1, col2 = st.columns(2)
+            with col1:
+                Q_hv = st.number_input("Portata aria Q [m³/h]:", value=2000.0, min_value=1.0, key="hv_Q")
+                D_hv = st.number_input("Diametro interno D [mm]:", value=315.0, min_value=50.0, key="hv_D")
+            with col2:
+                L_hv = st.number_input("Lunghezza condotta L [m]:", value=20.0, min_value=0.1, key="hv_L")
+                rug_hv = st.number_input("Rugosità [mm]:", value=0.09, min_value=0.001, key="hv_rug")
+            if st.button("Calcola Perdita", key="hv_btn1"):
+                try:
+                    r = hvac.perdita_carico_condotta(Q_hv, D_hv, L_hv, rugosita_mm=rug_hv, T_C=T_hvac)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Velocità", f"{r['v_ms']:.2f} m/s")
+                    c2.metric("Perdita lineare", f"{r['dP_Pa_m']:.2f} Pa/m")
+                    c3.metric("Perdita totale", f"{r['dP_Pa_tot']:.0f} Pa")
+                    st.info(f"Re = {r['Re']:.0f} ({r['regime']})  |  f = {r['f_darcy']:.4f}")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_hvac == "Perdita di carico (rettangolare)":
+            col1, col2 = st.columns(2)
+            with col1:
+                Q_hvr = st.number_input("Portata aria Q [m³/h]:", value=2000.0, min_value=1.0, key="hvr_Q")
+                a_hvr = st.number_input("Lato a [mm]:", value=400.0, min_value=50.0, key="hvr_a")
+            with col2:
+                b_hvr = st.number_input("Lato b [mm]:", value=300.0, min_value=50.0, key="hvr_b")
+                L_hvr = st.number_input("Lunghezza L [m]:", value=20.0, min_value=0.1, key="hvr_L")
+            if st.button("Calcola Perdita Rettangolare", key="hvr_btn"):
+                try:
+                    r = hvac.perdita_carico_condotta(Q_hvr, 0.0, L_hvr, forma="rettangolare", a_mm=a_hvr, b_mm=b_hvr, T_C=T_hvac)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Dh", f"{r['Dh_mm']:.0f} mm")
+                    c2.metric("Velocità", f"{r['v_ms']:.2f} m/s")
+                    c3.metric("Perdita totale", f"{r['dP_Pa_tot']:.0f} Pa")
+                    st.info(f"Re = {r['Re']:.0f} ({r['regime']})  |  ΔP/m = {r['dP_Pa_m']:.2f} Pa/m")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        elif sub_hvac == "Dimensionamento circolare":
+            col1, col2 = st.columns(2)
+            with col1:
+                Q_hd = st.number_input("Portata aria Q [m³/h]:", value=2000.0, min_value=1.0, key="hd_Q")
+            with col2:
+                tipo_cond = st.selectbox("Tipo condotta:", list(hvac.VELOCITA_RACCOMANDATE_MS.keys()), key="hd_tipo")
+                v_max_hd = hvac.VELOCITA_RACCOMANDATE_MS[tipo_cond]["max"]
+                st.info(f"v max consigliata: {v_max_hd} m/s")
+            if st.button("Dimensiona Condotta", key="hd_btn"):
+                try:
+                    r = hvac.dimensiona_condotta_circolare(Q_hd, v_max_hd)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("D minimo", f"{r['D_min_mm']:.0f} mm")
+                    c2.metric("D normalizzato", f"{r['D_normalizzato_mm']} mm")
+                    c3.metric("Velocità effettiva", f"{r['v_effettiva_ms']:.2f} m/s")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                Q_hrect = st.number_input("Portata aria Q [m³/h]:", value=2000.0, min_value=1.0, key="hrect_Q")
+                rap_hrect = st.number_input("Rapporto lati b/a:", value=1.5, min_value=1.0, max_value=4.0, key="hrect_rap")
+            with col2:
+                tipo_rect = st.selectbox("Tipo condotta:", list(hvac.VELOCITA_RACCOMANDATE_MS.keys()), key="hrect_tipo")
+                v_max_rect = hvac.VELOCITA_RACCOMANDATE_MS[tipo_rect]["max"]
+                st.info(f"v max consigliata: {v_max_rect} m/s")
+            if st.button("Dimensiona Rettangolare", key="hrect_btn"):
+                try:
+                    r = hvac.dimensiona_condotta_rettangolare(Q_hrect, rap_hrect, v_max_rect)
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("Lato a", f"{r['a_mm']:.0f} mm")
+                    c2.metric("Lato b", f"{r['b_mm']:.0f} mm")
+                    c3.metric("Dh", f"{r['Dh_mm']:.0f} mm")
+                    c4.metric("v effettiva", f"{r['v_effettiva_ms']:.2f} m/s")
+                except (ValueError, ZeroDivisionError) as e:
+                    st.error(str(e))
+
 
 elif categoria == "🔒  Sicurezza & Utilities":
     _card_open("sic", "🔒 Sicurezza & Utilities", "ISO 9612 / D.Lgs 81/2008")
@@ -2619,6 +3569,7 @@ elif categoria == "🔒  Sicurezza & Utilities":
             "Rumore — LEX,8h Esposizione",
             "Rumore — Verifica DPI (SNR)",
             "Rumore — Attenuazione per Distanza",
+            "Performance Level — EN ISO 13849",
         ],
         key="sic_tool",
     )
@@ -2713,6 +3664,57 @@ elif categoria == "🔒  Sicurezza & Utilities":
                     st.plotly_chart(fig_att, use_container_width=True)
             except (ValueError, ZeroDivisionError) as e:
                 st.error(str(e))
+
+    elif tool_sic == "Performance Level — EN ISO 13849":
+        st.subheader("Performance Level (PL) e SIL — EN ISO 13849-1")
+        sub_pl = st.radio("Calcolo:", ["Calcola PL da parametri", "MTTFd da B10d", "Verifica PLr"], horizontal=True, key="pl_sub")
+        if sub_pl == "Calcola PL da parametri":
+            col1, col2 = st.columns(2)
+            with col1:
+                MTTFd_pl = st.number_input("MTTFd canale [anni]:", value=30.0, min_value=0.1, max_value=100.0, key="pl_mttfd")
+                DCavg_pl = st.slider("DCavg [%]:", 0, 100, 90, key="pl_dc")
+            with col2:
+                cat_pl = st.selectbox("Categoria architetturale:", ["B", "1", "2", "3", "4"], index=3, key="pl_cat")
+            if st.button("Calcola PL", key="pl_btn1"):
+                try:
+                    r = pl_iso.calcola_PL(MTTFd_pl, DCavg_pl, cat_pl)
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("Performance Level", f"PL {r['PL']}")
+                    c2.metric("SIL equivalente", r["SIL"])
+                    c3.metric("PFHd [1/h]", f"{r['PFHd_1_h']:.0e}")
+                    c4.metric("MTTFd classe", r["MTTFd_classe"])
+                    st.info(f"Categoria {r['categoria']}: {r['descrizione_categoria']}")
+                    st.caption(f"DC classe: {r['DC_classe']}  |  MTTFd: {r['MTTFd_anni']} anni ({r['MTTFd_classe']})")
+                except ValueError as e:
+                    st.error(str(e))
+        elif sub_pl == "MTTFd da B10d":
+            col1, col2 = st.columns(2)
+            with col1:
+                B10d_pl = st.number_input("B10d [cicli]:", value=2000000.0, min_value=1000.0, key="pl_B10d")
+            with col2:
+                n_op = st.number_input("Operazioni/anno:", value=52000.0, min_value=1.0, key="pl_nop",
+                                        help="Es. 1 op/giorno × 250gg = 250; 200op/giorno × 250gg = 50000")
+            if st.button("Calcola MTTFd", key="pl_btn2"):
+                try:
+                    r = pl_iso.MTTFd_da_B10d(B10d_pl, n_op)
+                    st.success(f"MTTFd = **{r['MTTFd_anni']:.1f} anni** ({r['MTTFd_classe']})")
+                    if r["nota"]:
+                        st.warning(r["nota"])
+                except ValueError as e:
+                    st.error(str(e))
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                PL_rag = st.selectbox("PL raggiunto:", ["a", "b", "c", "d", "e"], index=3, key="pl_rag")
+            with col2:
+                PLr_req = st.selectbox("PLr richiesto:", ["a", "b", "c", "d", "e"], index=3, key="pl_req")
+            if st.button("Verifica PLr", key="pl_btn3"):
+                try:
+                    r = pl_iso.verifica_PLr(PL_rag, PLr_req)
+                    (st.success if r["conforme"] else st.error)(r["giudizio"])
+                    st.caption(f"SIL raggiunto: {r['SIL_raggiunto']}")
+                except ValueError as e:
+                    st.error(str(e))
 
 
 st.markdown("---")
