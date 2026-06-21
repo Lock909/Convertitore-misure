@@ -49,6 +49,7 @@ import alberi_torsione as alb
 import saldature as sald
 import condotte_hvac as hvac
 import performance_level as pl_iso
+import mark_vie as mv
 from costanti import SEZIONI_COMMERCIALI, TENSIONE_MONOFASE, TENSIONE_TRIFASE
 
 
@@ -177,6 +178,7 @@ _SEZIONI = [
     "🔧  Pneumatica & Strumenti",
     "🌡️  Termotecnica & Impianti",
     "🔒  Sicurezza & Utilities",
+    "🎛️  Mark VI/VIe & ToolboxST",
 ]
 
 if "_nav_goto" in st.session_state:
@@ -207,6 +209,7 @@ _NAV_MAP = {
     "🔩  Meccanica":                "🔩  Meccanica",
     "🔧  Pneumatica & Strumenti":   "🔧  Pneumatica & Strumenti",
     "🌡️  Termotecnica & Impianti":  "🌡️  Termotecnica & Impianti",
+    "🎛️  Mark VI/VIe & ToolboxST":  "🎛️  Mark VI/VIe & ToolboxST",
 }
 
 if categoria == "🏠  Home":
@@ -223,6 +226,7 @@ if categoria == "🏠  Home":
         ("🔧", "Pneumatica & Strum.",  "🔧  Pneumatica & Strumenti",  "Aria compressa, TC, Pt100",     "IEC 60751"),
         ("🌡️", "Termotecnica",         "🌡️  Termotecnica & Impianti", "Scambiatori, illuminotecnica",  "EN 12464-1"),
         ("🔒", "Sicurezza & Utilities","🔒  Sicurezza & Utilities",   "Rumore, serbatoi, valvole, UPS","ISO 9612"),
+        ("🎛️", "Mark VI/VIe",          "🎛️  Mark VI/VIe & ToolboxST", "Schede I/O, TMR, ToolboxST",    "GEH-6721"),
     ]
 
     cols = st.columns(4)
@@ -3715,6 +3719,169 @@ elif categoria == "🔒  Sicurezza & Utilities":
                     st.caption(f"SIL raggiunto: {r['SIL_raggiunto']}")
                 except ValueError as e:
                     st.error(str(e))
+
+
+elif categoria == "🎛️  Mark VI/VIe & ToolboxST":
+    _card_open("markvie", "🎛️ GE Mark VI/VIe & ToolboxST", "GEH-6721")
+    st.caption("Fonti: GEH-6721 Vol. I (System Guide — architettura) e GEH-6721G Vol. II (System Guide — schede I/O), GE Vernova / GE Energy, documentazione pubblica.")
+    tool_mv = st.selectbox(
+        "Seleziona Strumento:",
+        [
+            "Riferimento — Schede I/O",
+            "Riferimento — Architetture di Ridondanza",
+            "Riferimento — Terminologia ControlST/ToolboxST",
+            "Calcolo — Scalatura Canale PAIC",
+            "Calcolo — Voting TMR (2oo3)",
+            "Calcolo — MTBF Serie (Simplex)",
+            "Calcolo — Disponibilità TMR 2oo3",
+            "Calcolo — Corrente Assorbita TBCI",
+            "Calcolo — Derating Relè TRLYH1x",
+        ],
+        key="mv_tool",
+    )
+
+    if tool_mv == "Riferimento — Schede I/O":
+        st.subheader("Tabella di riferimento schede I/O Mark VIe (GEH-6721G Vol. II)")
+        filtro = st.text_input("Filtra per sigla o funzione:", key="mv_filtro")
+        rows = []
+        for sigla, info in mv.SCHEDE_IO.items():
+            riga = f"{sigla} {info['nome']} {info['funzione']}".lower()
+            if filtro and filtro.lower() not in riga:
+                continue
+            rows.append({"Sigla": sigla, "Nome": info["nome"], "Funzione": info["funzione"], "Canali": info["canali"]})
+        st.table(rows)
+        st.caption(f"{len(rows)} schede mostrate su {len(mv.SCHEDE_IO)} totali.")
+
+    elif tool_mv == "Riferimento — Architetture di Ridondanza":
+        st.subheader("Architetture di ridondanza controllore (GEH-6721 Vol. I §1.6)")
+        for nome, info in mv.ARCHITETTURE_RIDONDANZA.items():
+            with st.expander(f"{nome} — {info['controllori']} controllori, {info['reti_ionet']} IONet"):
+                st.write(info["descrizione"])
+        st.subheader("Opzioni di ridondanza I/O")
+        for nome, desc in mv.RIDONDANZA_IO.items():
+            st.markdown(f"- **{nome}**: {desc}")
+
+    elif tool_mv == "Riferimento — Terminologia ControlST/ToolboxST":
+        st.subheader("Terminologia ControlST / ToolboxST")
+        for termine, desc in mv.TERMINOLOGIA_TOOLBOXST.items():
+            st.markdown(f"**{termine}** — {desc}")
+
+        st.markdown("---")
+        st.subheader("Concetti di programmazione ToolboxST")
+        st.caption("Fonte: GEI-100746 ControlST Release Notes — riferimenti di capitolo al manuale GEH-6700 "
+                   "'ToolboxST User Guide for Mark VIe' (manuale stesso non disponibile in questa raccolta).")
+        for termine, desc in mv.CONCETTI_PROGRAMMAZIONE_TOOLBOXST.items():
+            st.markdown(f"**{termine}** — {desc}")
+
+        st.markdown("---")
+        st.subheader("Struttura del manuale GEH-6700 (capitoli confermati)")
+        for cap, contenuto in mv.STRUTTURA_GEH6700_TOOLBOXST.items():
+            st.markdown(f"- **{cap}**: {contenuto}")
+
+    elif tool_mv == "Calcolo — Scalatura Canale PAIC":
+        st.subheader("Scalatura canale analogico PAIC (GEH-6721G p.43)")
+        col1, col2 = st.columns(2)
+        with col1:
+            span_mv = st.selectbox("Span canale:", list(mv.PAIC_SPAN.keys()), key="mv_span")
+        with col2:
+            pct_mv = st.slider("Percentuale di scala [%]:", 0.0, 100.0, 50.0, step=0.1, key="mv_pct")
+        if st.button("Calcola Scalatura", key="mv_btn1"):
+            try:
+                r = mv.scala_paic(pct_mv, span_mv)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Valore", f"{r['valore']:.4f} {r['unita']}")
+                c2.metric("Risoluzione (LSB)", f"{r['lsb']:.6f} {r['unita']}")
+                c3.metric("Accuratezza ±", f"{r['accuratezza_assoluta']:.4f} {r['unita']}")
+                st.caption(f"PAIC: convertitore A/D a {mv.PAIC_RISOLUZIONE_BIT} bit, accuratezza {mv.PAIC_ACCURATEZZA_PCT_FS}% FS.")
+            except ValueError as e:
+                st.error(str(e))
+
+    elif tool_mv == "Calcolo — Voting TMR (2oo3)":
+        st.subheader("Voting a 2 su 3 (mediano) per ingressi TMR fanned/voted")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            v1_mv = st.number_input("Valore canale R:", value=100.0, key="mv_v1")
+        with col2:
+            v2_mv = st.number_input("Valore canale S:", value=100.2, key="mv_v2")
+        with col3:
+            v3_mv = st.number_input("Valore canale T:", value=99.7, key="mv_v3")
+        tol_mv = st.number_input("Tolleranza diagnostica (stesse unità):", value=1.0, min_value=0.0, key="mv_tol")
+        if st.button("Calcola Voting", key="mv_btn2"):
+            r = mv.voting_tmr_mediano(v1_mv, v2_mv, v3_mv, tol_mv)
+            st.success(f"Valore votato (mediano): **{r['valore_votato']:.4f}**")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Scarto R", f"{r['scarti']['v1']:.4f}")
+            c2.metric("Scarto S", f"{r['scarti']['v2']:.4f}")
+            c3.metric("Scarto T", f"{r['scarti']['v3']:.4f}")
+            if r["canali_sospetti"]:
+                st.error(f"Canali fuori tolleranza: {', '.join(r['canali_sospetti'])}")
+            else:
+                st.info("Tutti i canali entro tolleranza.")
+
+    elif tool_mv == "Calcolo — MTBF Serie (Simplex)":
+        st.subheader("MTBF risultante di componenti in serie (architettura simplex)")
+        n_mtbf = st.number_input("Numero componenti:", min_value=2, max_value=10, value=3, step=1, key="mv_nmtbf")
+        mtbf_vals = []
+        cols_mtbf = st.columns(int(n_mtbf))
+        for i in range(int(n_mtbf)):
+            with cols_mtbf[i]:
+                m = st.number_input(f"MTBF #{i+1} [anni]:", value=50.0, min_value=0.1, key=f"mv_mtbf{i}")
+                mtbf_vals.append(m)
+        if st.button("Calcola MTBF Sistema", key="mv_btn3"):
+            try:
+                r = mv.mtbf_serie(mtbf_vals)
+                st.success(f"MTBF sistema (serie): **{r['MTBF_sistema_anni']:.2f} anni**")
+            except ValueError as e:
+                st.error(str(e))
+
+    elif tool_mv == "Calcolo — Disponibilità TMR 2oo3":
+        st.subheader("Stima semplificata disponibilità TMR 2oo3")
+        st.caption("Modello didattico (k-su-n) — il calcolo certificato IEC 61508 richiede lo strumento Exida exSILentia (GEH-6721 Vol. I §1.7.1).")
+        col1, col2 = st.columns(2)
+        with col1:
+            mtbf_can = st.number_input("MTBF canale singolo [anni]:", value=50.0, min_value=0.1, key="mv_mtbfcan")
+        with col2:
+            mttr_mv = st.number_input("MTTR [ore]:", value=4.0, min_value=0.1, key="mv_mttr")
+        if st.button("Calcola Disponibilità TMR", key="mv_btn4"):
+            try:
+                r = mv.disponibilita_tmr_2oo3(mtbf_can, mttr_mv)
+                c1, c2 = st.columns(2)
+                c1.metric("MTBF sistema TMR", f"{r['MTBF_sistema_TMR_anni']:,.0f} anni")
+                c2.metric("Fattore miglioramento", f"×{r['fattore_miglioramento']:,.0f}")
+                st.caption(f"Indisponibilità canale: {r['indisponibilita_canale']:.2e}  |  Indisponibilità sistema TMR: {r['indisponibilita_sistema_TMR']:.2e}")
+            except ValueError as e:
+                st.error(str(e))
+
+    elif tool_mv == "Calcolo — Corrente Assorbita TBCI":
+        st.subheader("Corrente e potenza assorbita scheda TBCI (24 canali contatto)")
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo_tbci = st.selectbox("Tipo eccitazione:", list(mv.TBCI_SPECS.keys()), key="mv_tbci_tipo")
+        with col2:
+            n_alta_tbci = st.number_input("Circuiti a corrente elevata:", value=3, min_value=0, max_value=24, key="mv_tbci_nalta")
+        n_norm_tbci = st.number_input("Circuiti a corrente normale:", value=21, min_value=0, max_value=24, key="mv_tbci_nnorm")
+        if st.button("Calcola Corrente TBCI", key="mv_btn5"):
+            try:
+                r = mv.corrente_assorbita_tbci(tipo_tbci, int(n_norm_tbci), int(n_alta_tbci))
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Corrente totale", f"{r['I_totale_mA']:.1f} mA")
+                c2.metric("Potenza totale", f"{r['P_totale_W']:.2f} W")
+                c3.metric("Circuiti totali", r["n_circuiti_totali"])
+            except ValueError as e:
+                st.error(str(e))
+
+    else:  # Derating Relè TRLYH1x
+        st.subheader("Derating corrente relè TRLYH1x vs temperatura ambiente")
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo_trly = st.selectbox("Tipo relè:", list(mv.TRLY_DERATING.keys()), key="mv_trly_tipo")
+        with col2:
+            T_trly = st.slider("Temperatura ambiente [°C]:", -30, 65, 45, key="mv_trly_T")
+        if st.button("Calcola Derating", key="mv_btn6"):
+            r = mv.corrente_derating_relay_trly(tipo_trly, T_trly)
+            c1, c2 = st.columns(2)
+            c1.metric("Corrente ammissibile", f"{r['I_ammissibile_A']:.2f} A")
+            c2.metric("MTBF relè", f"{r['MTBF_relay_anni']:.0f} anni")
 
 
 st.markdown("---")

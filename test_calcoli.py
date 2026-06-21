@@ -35,6 +35,15 @@ import ruote_dentate as rd
 import perdite_carico_distribuite as pcd
 import trasduttori_pressione as tp
 import quadro_elettrico as qe
+import rifasamento_condensatori as rifas
+import caduta_tensione_bt as cadbt
+import tubazione_pressione as tubp
+import avviamento_motore as avv
+import alberi_torsione as alb
+import saldature as sald
+import condotte_hvac as hvac
+import performance_level as pl_iso
+import mark_vie as mv
 
 
 class TestAutomazione(unittest.TestCase):
@@ -1040,6 +1049,353 @@ class TestQuadroElettrico(unittest.TestCase):
     def test_componenti_vuoti(self):
         with self.assertRaises(ValueError):
             qe.potenza_dissipata_componenti({})
+
+
+class TestRifasamentoCondensatori(unittest.TestCase):
+    def test_potenza_reattiva_attuale(self):
+        r = rifas.potenza_reattiva_attuale(50, 0.72)
+        self.assertAlmostEqual(r["Q_kvar"], 50 * math.tan(math.acos(0.72)), places=4)
+
+    def test_potenza_reattiva_cos_phi_invalido(self):
+        with self.assertRaises(ValueError):
+            rifas.potenza_reattiva_attuale(50, 1.5)
+
+    def test_kvar_necessari(self):
+        r = rifas.kvar_necessari(50, 0.72, 0.95)
+        self.assertGreater(r["Q_c_kvar"], 0)
+        self.assertGreaterEqual(r["Q_c_kvar_arrotondato"], r["Q_c_kvar"])
+
+    def test_kvar_necessari_target_minore_errore(self):
+        with self.assertRaises(ValueError):
+            rifas.kvar_necessari(50, 0.95, 0.72)
+
+    def test_capacita_condensatori_triangolo(self):
+        r = rifas.capacita_condensatori(30, 400, "triangolo")
+        self.assertGreater(r["C_per_fase_uF"], 0)
+
+    def test_capacita_condensatori_stella_maggiore_di_triangolo(self):
+        r_tri = rifas.capacita_condensatori(30, 400, "triangolo")
+        r_st = rifas.capacita_condensatori(30, 400, "stella")
+        self.assertGreater(r_st["C_per_fase_uF"], r_tri["C_per_fase_uF"])
+
+    def test_verifica_rifasamento(self):
+        r = rifas.verifica_rifasamento(50, 0.72, 30)
+        self.assertGreater(r["cos_phi_risultante"], 0.72)
+        self.assertLess(r["I_dopo_A"], r["I_prima_A"])
+
+
+class TestCadutaTensioneBT(unittest.TestCase):
+    def test_caduta_tensione_trifase(self):
+        r = cadbt.caduta_tensione_trifase(20, 50, 16, 0.9)
+        self.assertGreater(r["dV_V"], 0)
+        self.assertTrue(r["conforme_5pct"])
+
+    def test_caduta_tensione_monofase(self):
+        r = cadbt.caduta_tensione_monofase(16, 30, 4, 0.9)
+        self.assertGreater(r["dV_pct"], 0)
+
+    def test_caduta_tensione_valori_invalidi(self):
+        with self.assertRaises(ValueError):
+            cadbt.caduta_tensione_trifase(-5, 50, 16, 0.9)
+
+    def test_sezione_da_caduta_max(self):
+        r = cadbt.sezione_da_caduta_max(10, 400, 50, 3.0, 0.9, "trifase")
+        self.assertIn(r["S_mm2_normalizzata"], cadbt.SEZIONI_NORMALIZZATE_MM2)
+        self.assertGreaterEqual(r["S_mm2_normalizzata"], r["S_mm2_calcolata"])
+
+    def test_sezione_da_caduta_max_monofase(self):
+        r = cadbt.sezione_da_caduta_max(3, 230, 30, 3.0, 0.9, "monofase")
+        self.assertGreater(r["S_mm2_normalizzata"], 0)
+
+    def test_giudizio_alta_caduta(self):
+        r = cadbt.caduta_tensione_trifase(100, 200, 4, 0.9)
+        self.assertFalse(r["conforme_5pct"])
+
+
+class TestTubazionePressione(unittest.TestCase):
+    def test_spessore_minimo(self):
+        r = tubp.spessore_minimo(10, 48.3, 150)
+        self.assertGreater(r["t_min_mm"], r["t_calc_mm"])
+        self.assertGreaterEqual(r["t_normalizzato_mm"], r["t_min_mm"])
+
+    def test_spessore_minimo_valori_invalidi(self):
+        with self.assertRaises(ValueError):
+            tubp.spessore_minimo(-1, 48.3, 150)
+
+    def test_pressione_ammissibile(self):
+        r = tubp.pressione_ammissibile(4.0, 48.3, 150)
+        self.assertGreater(r["P_amm_bar"], 0)
+
+    def test_pressione_ammissibile_spessore_insufficiente(self):
+        with self.assertRaises(ValueError):
+            tubp.pressione_ammissibile(0.5, 48.3, 150, c_corrosione_mm=1.0)
+
+    def test_verifica_tubazione_conforme(self):
+        r = tubp.verifica_tubazione(10, 48.3, 5.0, 150)
+        self.assertTrue(r["conforme"])
+
+    def test_verifica_tubazione_non_conforme(self):
+        r = tubp.verifica_tubazione(50, 48.3, 1.6, 150)
+        self.assertFalse(r["conforme"])
+
+    def test_round_trip_pressione_spessore(self):
+        sp = tubp.spessore_minimo(10, 100, 150)
+        pr = tubp.pressione_ammissibile(sp["t_normalizzato_mm"], 100, 150)
+        self.assertGreaterEqual(pr["P_amm_bar"], 10)
+
+
+class TestAvviamentoMotore(unittest.TestCase):
+    def test_correnti_motore(self):
+        r = avv.correnti_motore(11, 400, 0.85, 0.92, 6.0)
+        self.assertAlmostEqual(r["I_avviamento_A"], r["I_nominale_A"] * 6.0, places=4)
+
+    def test_correnti_motore_valori_invalidi(self):
+        with self.assertRaises(ValueError):
+            avv.correnti_motore(-1, 400, 0.85, 0.92)
+
+    def test_coppia_motore(self):
+        r = avv.coppia_motore(15, 1450, 1.5)
+        self.assertAlmostEqual(r["M_avviamento_Nm"], r["M_nominale_Nm"] * 1.5, places=4)
+
+    def test_caduta_tensione_avviamento_conforme(self):
+        r = avv.caduta_tensione_avviamento(50, 5, 400)
+        self.assertTrue(r["ammissibile"])
+
+    def test_caduta_tensione_avviamento_non_conforme(self):
+        r = avv.caduta_tensione_avviamento(500, 50, 400)
+        self.assertFalse(r["ammissibile"])
+
+    def test_metodi_avviamento(self):
+        r = avv.metodi_avviamento(11, 400, 0.85, 0.92)
+        self.assertIn("Diretto (DOL)", r["metodi"])
+        self.assertIn("Stella-Triangolo (Y-Δ)", r["metodi"])
+        self.assertLess(r["metodi"]["Stella-Triangolo (Y-Δ)"]["I_avviamento_A"], r["I_avviamento_diretto_A"])
+
+
+class TestAlberiTorsione(unittest.TestCase):
+    def test_momento_torcente(self):
+        r = alb.momento_torcente(15, 1450)
+        self.assertGreater(r["Mt_Nm"], 0)
+
+    def test_momento_torcente_invalido(self):
+        with self.assertRaises(ValueError):
+            alb.momento_torcente(-15, 1450)
+
+    def test_diametro_minimo_torsione(self):
+        r = alb.diametro_minimo_torsione(100, 30)
+        self.assertGreaterEqual(r["d_normalizzato_mm"], r["d_min_mm"])
+
+    def test_tensioni_albero(self):
+        r = alb.tensioni_albero(100, 80, 40)
+        self.assertGreater(r["sigma_eq_MPa"], 0)
+        self.assertGreater(r["sigma_eq_MPa"], r["tau_MPa"])
+
+    def test_fattore_sicurezza_statico(self):
+        r = alb.fattore_sicurezza_statico(100, 80, 40, 490)
+        self.assertGreater(r["n_statico"], 0)
+
+    def test_verifica_goodman(self):
+        r = alb.verifica_goodman(120, 80, 700, 350)
+        self.assertGreater(r["n_Goodman"], 0)
+        self.assertGreater(r["n_Gerber"], r["n_Goodman"])
+
+    def test_verifica_goodman_invalido(self):
+        with self.assertRaises(ValueError):
+            alb.verifica_goodman(120, 80, 0, 350)
+
+
+class TestSaldature(unittest.TestCase):
+    def test_resistenza_ammissibile_cordone(self):
+        r = sald.resistenza_ammissibile_cordone("S235")
+        self.assertGreater(r["f_vwd_MPa"], 0)
+
+    def test_resistenza_ammissibile_acciaio_invalido(self):
+        with self.assertRaises(ValueError):
+            sald.resistenza_ammissibile_cordone("X999")
+
+    def test_gola_minima(self):
+        r = sald.gola_minima(10)
+        self.assertGreaterEqual(r["a_min_mm"], 3.0)
+
+    def test_verifica_cordone_taglio_conforme(self):
+        r = sald.verifica_cordone_taglio(30, 5, 100, "S235")
+        self.assertTrue(r["conforme"])
+
+    def test_verifica_cordone_taglio_non_conforme(self):
+        r = sald.verifica_cordone_taglio(500, 3, 50, "S235")
+        self.assertFalse(r["conforme"])
+
+    def test_verifica_cordone_normale(self):
+        r = sald.verifica_cordone_normale(20, 5, 100, acciaio="S355")
+        self.assertGreater(r["sigma_perp_MPa"], 0)
+
+    def test_cordone_a_doppio_T(self):
+        r = sald.cordone_a_doppio_T(40, 6, 80, acciaio="S275")
+        self.assertIn("conforme", r)
+
+
+class TestCondotteHVAC(unittest.TestCase):
+    def test_proprieta_aria(self):
+        r = hvac.proprieta_aria(20)
+        self.assertGreater(r["rho_kg_m3"], 1.0)
+        self.assertLess(r["rho_kg_m3"], 1.3)
+
+    def test_diametro_idraulico_rettangolare(self):
+        Dh = hvac.diametro_idraulico_rettangolare(400, 300)
+        self.assertAlmostEqual(Dh, 2 * 400 * 300 / (400 + 300), places=4)
+
+    def test_perdita_carico_condotta_circolare(self):
+        r = hvac.perdita_carico_condotta(2000, 315, 20)
+        self.assertEqual(r["regime"], "Turbolento")
+        self.assertGreater(r["dP_Pa_tot"], 0)
+
+    def test_perdita_carico_condotta_rettangolare(self):
+        r = hvac.perdita_carico_condotta(2000, 0.0, 20, forma="rettangolare", a_mm=400, b_mm=300)
+        self.assertGreater(r["dP_Pa_tot"], 0)
+
+    def test_perdita_carico_valori_invalidi(self):
+        with self.assertRaises(ValueError):
+            hvac.perdita_carico_condotta(-100, 315, 20)
+
+    def test_dimensiona_condotta_circolare(self):
+        r = hvac.dimensiona_condotta_circolare(2000, 8.0)
+        self.assertGreaterEqual(r["D_normalizzato_mm"], r["D_min_mm"])
+
+    def test_dimensiona_condotta_rettangolare(self):
+        r = hvac.dimensiona_condotta_rettangolare(2000, 1.5, 8.0)
+        self.assertAlmostEqual(r["b_mm"] / r["a_mm"], r["rapporto_lati"], places=2)
+
+
+class TestPerformanceLevel(unittest.TestCase):
+    def test_calcola_PL_categoria_3(self):
+        r = pl_iso.calcola_PL(30, 90, "3")
+        self.assertEqual(r["PL"], "d")
+        self.assertEqual(r["SIL"], "SIL 2")
+
+    def test_calcola_PL_categoria_B(self):
+        r = pl_iso.calcola_PL(5, 0, "B")
+        self.assertEqual(r["PL"], "a")
+
+    def test_calcola_PL_categoria_invalida(self):
+        with self.assertRaises(ValueError):
+            pl_iso.calcola_PL(30, 90, "9")
+
+    def test_calcola_PL_MTTFd_invalido(self):
+        with self.assertRaises(ValueError):
+            pl_iso.calcola_PL(-1, 90, "3")
+
+    def test_MTTFd_da_B10d(self):
+        r = pl_iso.MTTFd_da_B10d(2_000_000, 500_000)
+        self.assertAlmostEqual(r["MTTFd_anni"], 2_000_000 / (0.1 * 500_000), places=2)
+
+    def test_MTTFd_da_B10d_limitato_100_anni(self):
+        r = pl_iso.MTTFd_da_B10d(100_000_000, 100)
+        self.assertEqual(r["MTTFd_anni"], 100.0)
+        self.assertNotEqual(r["nota"], "")
+
+    def test_verifica_PLr_conforme(self):
+        r = pl_iso.verifica_PLr("d", "c")
+        self.assertTrue(r["conforme"])
+
+    def test_verifica_PLr_non_conforme(self):
+        r = pl_iso.verifica_PLr("b", "d")
+        self.assertFalse(r["conforme"])
+
+    def test_verifica_PLr_invalido(self):
+        with self.assertRaises(ValueError):
+            pl_iso.verifica_PLr("z", "d")
+
+
+class TestMarkVIe(unittest.TestCase):
+    def test_risoluzione_adc(self):
+        r = mv.risoluzione_adc(-10.0, 10.0, 16)
+        self.assertAlmostEqual(r["lsb"], 20.0 / 65536, places=8)
+
+    def test_risoluzione_adc_invalida(self):
+        with self.assertRaises(ValueError):
+            mv.risoluzione_adc(10.0, -10.0)
+
+    def test_scala_paic_centro_scala(self):
+        r = mv.scala_paic(50, "0-20 mA (canali 1-8)")
+        self.assertAlmostEqual(r["valore"], 10.0, places=4)
+
+    def test_scala_paic_span_invalido(self):
+        with self.assertRaises(ValueError):
+            mv.scala_paic(50, "span inesistente")
+
+    def test_scala_paic_pct_fuori_range(self):
+        with self.assertRaises(ValueError):
+            mv.scala_paic(150, "0-20 mA (canali 1-8)")
+
+    def test_scala_paic_bipolare(self):
+        r = mv.scala_paic(0, "±10 V dc (canali 1-8)")
+        self.assertAlmostEqual(r["valore"], -10.0, places=4)
+
+    def test_voting_tmr_concordanza(self):
+        r = mv.voting_tmr_mediano(100.0, 100.0, 100.0)
+        self.assertEqual(r["valore_votato"], 100.0)
+        self.assertFalse(r["disaccordo"])
+
+    def test_voting_tmr_mediano_corretto(self):
+        r = mv.voting_tmr_mediano(98.0, 105.0, 100.0)
+        self.assertEqual(r["valore_votato"], 100.0)
+
+    def test_voting_tmr_canale_sospetto(self):
+        r = mv.voting_tmr_mediano(100.0, 100.2, 90.0, tolleranza=1.0)
+        self.assertIn("v3", r["canali_sospetti"])
+        self.assertTrue(r["disaccordo"])
+
+    def test_mtbf_serie(self):
+        r = mv.mtbf_serie([50, 37, 47])
+        self.assertLess(r["MTBF_sistema_anni"], min(50, 37, 47))
+
+    def test_mtbf_serie_invalido(self):
+        with self.assertRaises(ValueError):
+            mv.mtbf_serie([50, -1])
+
+    def test_disponibilita_tmr_2oo3(self):
+        r = mv.disponibilita_tmr_2oo3(50, 4.0)
+        self.assertGreater(r["MTBF_sistema_TMR_anni"], r["MTBF_canale_anni"])
+        self.assertGreater(r["fattore_miglioramento"], 1.0)
+
+    def test_disponibilita_tmr_invalida(self):
+        with self.assertRaises(ValueError):
+            mv.disponibilita_tmr_2oo3(-5, 4.0)
+
+    def test_corrente_assorbita_tbci(self):
+        r = mv.corrente_assorbita_tbci("H1 (125 Vdc)", 21, 3)
+        self.assertAlmostEqual(r["I_totale_mA"], 21 * 2.5 + 3 * 10.0, places=4)
+        self.assertEqual(r["n_circuiti_totali"], 24)
+
+    def test_corrente_assorbita_tbci_tipo_invalido(self):
+        with self.assertRaises(ValueError):
+            mv.corrente_assorbita_tbci("X999")
+
+    def test_derating_relay_sotto_soglia(self):
+        r = mv.corrente_derating_relay_trly("1E (115 Vac)", 20)
+        self.assertEqual(r["I_ammissibile_A"], 10.0)
+
+    def test_derating_relay_sopra_soglia(self):
+        r = mv.corrente_derating_relay_trly("1E (115 Vac)", 70)
+        self.assertEqual(r["I_ammissibile_A"], 6.0)
+
+    def test_derating_relay_interpolato(self):
+        r = mv.corrente_derating_relay_trly("1E (115 Vac)", 45)
+        self.assertTrue(6.0 < r["I_ammissibile_A"] < 10.0)
+
+    def test_derating_relay_tipo_invalido(self):
+        with self.assertRaises(ValueError):
+            mv.corrente_derating_relay_trly("X999", 45)
+
+    def test_schede_io_non_vuoto(self):
+        self.assertGreater(len(mv.SCHEDE_IO), 30)
+        self.assertIn("PAIC", mv.SCHEDE_IO)
+        self.assertIn("PVIB", mv.SCHEDE_IO)
+
+    def test_architetture_ridondanza(self):
+        self.assertIn("TMR", mv.ARCHITETTURE_RIDONDANZA)
+        self.assertEqual(mv.ARCHITETTURE_RIDONDANZA["TMR"]["controllori"], 3)
+        self.assertEqual(mv.ARCHITETTURE_RIDONDANZA["Simplex"]["controllori"], 1)
 
 
 if __name__ == "__main__":
