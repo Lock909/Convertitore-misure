@@ -1,7 +1,9 @@
 # ==============================================================================
 # mark_vie.py — Riferimento e calcolatori per GE Mark VIe / Mark VI / ToolboxST
 # Fonti: GEH-6721_Vol_I (System Guide, architettura/ridondanza),
-#        GEH-6721G Vol II (System Guide, schede I/O e specifiche)
+#        GEH-6721G Vol II (System Guide, schede I/O e specifiche),
+#        manuali ControlST/WorkstationST (GEH-67xx / GEI-100xxx / GHT-200030)
+#        della cartella Documentation/ — citati per ciascun componente.
 # Nota: dati tecnici (canali, range, derating) tratti dai manuali pubblici
 #       GE Vernova citati. I valori di MTBF/MTBFO complessivi del sistema
 #       reale richiedono lo strumento Exida exSILentia (IEC 61508) — le
@@ -9,6 +11,8 @@
 # ==============================================================================
 
 import math
+
+import strumentazione as _stru   # fonte unica per le curve RTD/termocoppia (IEC 60751 / ITS-90)
 
 # ------------------------------------------------------------------
 # 1. Riferimento schede I/O (GEH-6721G Vol II — sintesi funzionale)
@@ -156,6 +160,325 @@ STRUTTURA_GEH6700_TOOLBOXST = {
     "Capitolo 6": "General Tab, Mark VIe Menus, Upgrading Modules, Hardware Tab, Reports, Watch Windows, Auto-reconfiguration",
     "Capitolo 11": "Configuration Management System (CMS) — versionamento e repository",
 }
+
+# ------------------------------------------------------------------
+# 3ter. Suite software ControlST / WorkstationST — catalogo componenti
+# Fonti: manuali GE Vernova / GE Energy presenti nella cartella
+#        Documentation/ (codice GEH/GEI + revisione citati per ciascuno).
+# WorkstationST è la piattaforma software lato operatore della famiglia
+# Mark VIe: raccoglie i dati dai componenti ControlST e li espone a
+# client di allarme, server OPC, storici (Historian) e gateway di campo.
+# Le descrizioni sintetizzano la sezione "Overview" del rispettivo manuale.
+# ------------------------------------------------------------------
+
+# Indice dei documenti effettivamente disponibili nella raccolta Documentation/
+# (codice senza suffisso revisione -> titolo, revisione, n. pagine)
+DOCUMENTI_CONTROLST = {
+    "GEH-6757":   {"titolo": "WorkstationST GSM 3.0 — User Guide",                         "rev": "C",  "pagine": 62},
+    "GEH-6759":   {"titolo": "WorkstationST Application Mark V Feature — System Guide",     "rev": "D",  "pagine": 176},
+    "GEH-6760":   {"titolo": "WorkstationST GSM 3.0 — Application Guide",                   "rev": "E",  "pagine": 102},
+    "GEI-100620": {"titolo": "WorkstationST Alarm Viewer — Instruction Guide",             "rev": "W",  "pagine": 119},
+    "GEI-100621": {"titolo": "WorkstationST OPC DA Server — Instruction Guide",            "rev": "P",  "pagine": 53},
+    "GEI-100622": {"titolo": "EGD Configuration Server",                                   "rev": "B",  "pagine": 8},
+    "GEI-100623": {"titolo": "WorkstationST Service — Instruction Guide",                  "rev": "M",  "pagine": 34},
+    "GEI-100624": {"titolo": "WorkstationST OPC AE Server",                                "rev": "J",  "pagine": 34},
+    "GEI-100626": {"titolo": "WorkstationST Alarm Server — Instruction Guide",             "rev": "K",  "pagine": 22},
+    "GEI-100627": {"titolo": "WorkstationST Recorder — User Guide",                        "rev": "F",  "pagine": 8},
+    "GEI-100628": {"titolo": "WorkstationST Historian — Instruction Guide",               "rev": "F",  "pagine": 32},
+    "GEI-100629": {"titolo": "WorkstationST HMI Configuration — User Guide",              "rev": "C",  "pagine": 13},
+    "GEI-100661": {"titolo": "WorkstationST Web View — Instruction Guide",                "rev": "D",  "pagine": 12},
+    "GEI-100662": {"titolo": "HART Message Server",                                        "rev": "A",  "pagine": 34},
+    "GEI-100693": {"titolo": "WorkstationST Network Monitor — Instruction Guide",          "rev": "N",  "pagine": 71},
+    "GEI-100696": {"titolo": "WorkstationST Modbus Feature — Instruction Guide",           "rev": "E",  "pagine": 47},
+    "GEI-100697": {"titolo": "WorkstationST/CIMPLICITY Advanced Viewer Integration",       "rev": "N",  "pagine": 95},
+    "GEI-100746": {"titolo": "ControlST Release Notes",                                    "rev": "HG", "pagine": 546},
+    "GEI-100752": {"titolo": "Historian Report Configuration — Instruction Guide",         "rev": "C",  "pagine": 27},
+    "GEI-100753": {"titolo": "Historian Report Post-installation — Instruction Guide",     "rev": "D",  "pagine": 11},
+    "GEI-100757": {"titolo": "WorkstationST Device Manager Gateway — Instruction Guide",   "rev": "H",  "pagine": 100},
+    "GEI-100795": {"titolo": "Trender — Instruction Guide",                                "rev": "T",  "pagine": 48},
+    "GEI-100828": {"titolo": "WorkstationST OPC UA Server — Instruction Guide",            "rev": "G",  "pagine": 16},
+    "GEI-100829": {"titolo": "WorkstationST Application Mark V Feature GSM Server",        "rev": "-",  "pagine": 66},
+    "GEI-100834": {"titolo": "WorkstationST Control System Health — Instruction Guide",    "rev": "P",  "pagine": 177},
+    "GEI-100853": {"titolo": "WorkstationST Mark V Ethernet Global Data (EGD)",            "rev": "A",  "pagine": 10},
+    "GHT-200030": {"titolo": "How to Enable Adobe PDF Full-Text Search for ControlST Documentation", "rev": "B", "pagine": 7},
+}
+
+# Componenti della suite, raggruppati per categoria funzionale.
+# Ogni voce: {categoria, funzione, doc} dove 'doc' è la chiave in DOCUMENTI_CONTROLST.
+SUITE_CONTROLST_WORKSTATIONST = {
+    "WorkstationST Service": {
+        "categoria": "Infrastruttura e servizi",
+        "funzione": "Scarica la configurazione ToolboxST sulla workstation, avvia/arresta le altre Feature WorkstationST "
+                    "e fornisce accesso alle informazioni di controllo e diagnostica delle Feature.",
+        "doc": "GEI-100623",
+    },
+    "Alarm Server": {
+        "categoria": "Allarmi ed eventi",
+        "funzione": "Raccoglie i dati da tutti i componenti monitorati e li rende disponibili ai client di allarme, "
+                    "fungendo da livello di normalizzazione dei dati di allarme.",
+        "doc": "GEI-100626",
+    },
+    "Alarm Viewer": {
+        "categoria": "Allarmi ed eventi",
+        "funzione": "Visualizza e gestisce allarmi ed eventi live e storici con funzioni avanzate di filtro e ordinamento.",
+        "doc": "GEI-100620",
+    },
+    "OPC DA Server": {
+        "categoria": "Comunicazione OPC",
+        "funzione": "Server OPC Data Access: espone i dati in tempo reale a client OPC di terze parti.",
+        "doc": "GEI-100621",
+    },
+    "OPC AE Server": {
+        "categoria": "Comunicazione OPC",
+        "funzione": "Server OPC Alarms & Events: espone allarmi ed eventi in tempo reale a client OPC.",
+        "doc": "GEI-100624",
+    },
+    "OPC UA Server": {
+        "categoria": "Comunicazione OPC",
+        "funzione": "Server OPC Unified Architecture (dati e sottoscrizioni allarmi/eventi), con condivisione "
+                    "dei certificati tra client e server.",
+        "doc": "GEI-100828",
+    },
+    "Historian": {
+        "categoria": "Dati storici e trend",
+        "funzione": "Configura Historian di terze parti per la raccolta di dati a lungo termine; il client OPC "
+                    "dell'Historian legge i dati dall'OPC DA Server del WorkstationST.",
+        "doc": "GEI-100628",
+    },
+    "Historian Report (Configuration)": {
+        "categoria": "Dati storici e trend",
+        "funzione": "Genera report periodici e on-demand dai dati archiviati nell'Historian (script Perl + interfaccia "
+                    "ODBC PI o OLE DB Proficy).",
+        "doc": "GEI-100752",
+    },
+    "Historian Report (Post-installation)": {
+        "categoria": "Dati storici e trend",
+        "funzione": "Procedure da completare dopo l'installazione del pacchetto Historian Report per renderlo operativo.",
+        "doc": "GEI-100753",
+    },
+    "Recorder": {
+        "categoria": "Dati storici e trend",
+        "funzione": "Raccoglie dati storici dagli altri componenti ToolboxST in file .dcaST (Data Collection and Analysis), "
+                    "accessibili dal Trender.",
+        "doc": "GEI-100627",
+    },
+    "Trender": {
+        "categoria": "Dati storici e trend",
+        "funzione": "Strumento di trend e analisi per recuperare e visualizzare i dati catturati (live e storici).",
+        "doc": "GEI-100795",
+    },
+    "Modbus Feature": {
+        "categoria": "Comunicazione di campo / fieldbus",
+        "funzione": "Feature Modbus configurata via ToolboxST: supporta comunicazione seriale ed Ethernet, in modalità "
+                    "master e slave.",
+        "doc": "GEI-100696",
+    },
+    "HART Message Server (HMS)": {
+        "categoria": "Comunicazione di campo / fieldbus",
+        "funzione": "Bridge tra il software Asset Management System (AMS) e i pacchi PHRA che ospitano i dispositivi HART "
+                    "nel controllo Mark VIe; emula un multiplexer hardware per ogni PHRA.",
+        "doc": "GEI-100662",
+    },
+    "Device Manager Gateway": {
+        "categoria": "Comunicazione di campo / fieldbus",
+        "funzione": "Gateway tra l'asset management system e i dispositivi di campo FOUNDATION Fieldbus, HART e PROFIBUS.",
+        "doc": "GEI-100757",
+    },
+    "EGD Configuration Server": {
+        "categoria": "Comunicazione di campo / fieldbus",
+        "funzione": "Servizio Windows che risponde ai messaggi di configurazione EGD (comandi Get/Put, revisione e stato); "
+                    "archivia i file XML definiti dalle specifiche del protocollo EGD.",
+        "doc": "GEI-100622",
+    },
+    "HMI Configuration": {
+        "categoria": "HMI e visualizzazione",
+        "funzione": "Feature HMI Config e HMI File Utility (scheda HMI Config di ToolboxST): esegue l'Importer per "
+                    "importare device, variabili e altri dati in un database CIMPLICITY.",
+        "doc": "GEI-100629",
+    },
+    "WorkstationST/CIMPLICITY Advanced Viewer Integration": {
+        "categoria": "HMI e visualizzazione",
+        "funzione": "Integrazione tra WorkstationST e CIMPLICITY HMI/SCADA per configurazione e flusso dati runtime "
+                    "(server e viewer CIMPLICITY).",
+        "doc": "GEI-100697",
+    },
+    "Web View": {
+        "categoria": "HMI e visualizzazione",
+        "funzione": "Funzione Web del WorkstationST che permette a un On Site Monitor (OSM) di pubblicare configurazione "
+                    "e dati in tempo reale come insieme di pagine Web.",
+        "doc": "GEI-100661",
+    },
+    "Network Monitor": {
+        "categoria": "Diagnostica rete e salute sistema",
+        "funzione": "Monitora la salute della rete NetworkST, degli switch e delle singole porte di rete.",
+        "doc": "GEI-100693",
+    },
+    "Control System Health (CSH)": {
+        "categoria": "Diagnostica rete e salute sistema",
+        "funzione": "Visualizza la salute dei vari componenti su Unit Data Highway (UDH), Plant Data Highway (PDH) e IONet.",
+        "doc": "GEI-100834",
+    },
+    "GSM 3.0 Server (GE Standard Messages)": {
+        "categoria": "Integrazione DCS / Mark V",
+        "funzione": "I GE Standard Messages (GSM) sono messaggi a livello applicativo elaborati da un gateway verso il DCS; "
+                    "il GSM server richiede l'accesso a un Alarm Server. (User Guide GEH-6757, Application Guide GEH-6760, "
+                    "server Mark V Feature GEI-100829).",
+        "doc": "GEH-6757",
+    },
+    "WorkstationST Application — Mark V Feature": {
+        "categoria": "Integrazione DCS / Mark V",
+        "funzione": "System Guide della feature che porta le funzioni della suite ControlST sopra i controllori Mark V.",
+        "doc": "GEH-6759",
+    },
+    "Mark V Ethernet Global Data (EGD)": {
+        "categoria": "Integrazione DCS / Mark V",
+        "funzione": "Ponte di dati real-time bidirezionale tra Mark V (ARCNET) e le EGD Pages dei controllori Mark VI/VIe "
+                    "(Ethernet).",
+        "doc": "GEI-100853",
+    },
+    "ControlST Release Notes": {
+        "categoria": "Suite e documentazione",
+        "funzione": "Note di rilascio della suite ControlST: versioni, funzionalità e riferimenti di capitolo al manuale "
+                    "GEH-6700 (ToolboxST User Guide).",
+        "doc": "GEI-100746",
+    },
+    "ControlST Documentation Global Search": {
+        "categoria": "Suite e documentazione",
+        "funzione": "Procedura per abilitare la ricerca full-text Adobe sull'intera documentazione ControlST.",
+        "doc": "GHT-200030",
+    },
+}
+
+
+# Sezioni/capitoli chiave di ciascun componente, con pagina del PDF.
+# Estratti dai bookmark (outline) dei manuali nella cartella Documentation/.
+# Formato: nome_componente -> [(titolo_sezione, pagina_pdf), ...]
+SEZIONI_COMPONENTI = {
+    "WorkstationST Service": [
+        ("1 Introduction", 6), ("2 WorkstationST Features", 6),
+        ("4 Start and Stop WorkstationST Service", 9), ("5 Configuration Files Data Flow", 10),
+    ],
+    "Alarm Server": [
+        ("1 Introduction", 4), ("2 Alarm Routing", 5),
+        ("5 Alarm Types", 9), ("7 Redundant Alarm Servers", 10),
+    ],
+    "Alarm Viewer": [
+        ("1 Introduction", 5), ("6 Operation", 11),
+        ("7 Advanced Features", 15), ("8 Live Alarms", 16),
+    ],
+    "OPC DA Server": [
+        ("1 Introduction", 4), ("3 Variable Names", 5),
+        ("3.5 OPC DA Server Variable Configuration", 8), ("6 OPC DA Client Privileges", 13),
+    ],
+    "OPC AE Server": [
+        ("Introduction", 4), ("Alarm and Event Routing", 4),
+        ("Configuring the OPC AE Server", 11), ("Configuring DCOM", 14),
+    ],
+    "OPC UA Server": [
+        ("1 Overview", 4), ("2 OPC UA Communication", 4),
+        ("3 Client Privileges", 10), ("6 Historical Data Access", 13),
+    ],
+    "Historian": [
+        ("1 Overview", 4), ("2 Configure Historian", 5),
+        ("3 Configure Variables for Data Collection", 9), ("4 Configure Historian Reports", 15),
+    ],
+    "Historian Report (Configuration)": [
+        ("1 Introduction", 6), ("4 Report Configuration", 8),
+        ("5 Automatic Report Generation", 20), ("6 Web Browser Interface", 24),
+    ],
+    "Historian Report (Post-installation)": [
+        ("1 Introduction", 4), ("2 Install Proficy-based Historian OLE DB", 5),
+        ("3 Install PI ODBC", 8),
+    ],
+    "Recorder": [
+        ("1 Introduction", 4), ("2 Capture Buffer", 5),
+        ("4 Trip Log", 5), ("8 Appendix: Supported Collections by Component", 8),
+    ],
+    "Trender": [
+        ("1 Overview", 4), ("2 Data Sources", 7), ("3 Concepts", 29),
+    ],
+    "Modbus Feature": [
+        ("Overview", 4), ("Configuration", 5),
+        ("Modbus Properties", 15), ("Scaling", 21),
+    ],
+    "HART Message Server (HMS)": [
+        ("Introduction", 3), ("HMS Configuration", 5),
+        ("HMS Monitoring", 13), ("Troubleshooting", 20),
+    ],
+    "Device Manager Gateway": [
+        ("1 Overview", 9), ("2 Third-party Asset Management Software", 11),
+        ("2.3 Configuration (Quick Start)", 15), ("4 Device Manager Gateway Security", 57),
+    ],
+    "EGD Configuration Server": [
+        ("Introduction", 5), ("Installation", 5), ("Typical EGD Files", 6),
+    ],
+    "HMI Configuration": [
+        ("Introduction", 3), ("HMI Configuration", 3), ("Hmi File Util", 8),
+    ],
+    "WorkstationST/CIMPLICITY Advanced Viewer Integration": [
+        ("1 Introduction", 5), ("2 Configuration", 7), ("3 CimEdit", 21),
+    ],
+    "Web View": [
+        ("1 Introduction", 3), ("2 Enabling WorkstationST Web", 3),
+        ("7 Appendix A .NET Framework Registration in IIS", 12),
+    ],
+    "Network Monitor": [
+        ("1 Introduction", 4), ("2 Configuration", 5),
+        ("3 Alarms", 23), ("4 Switch Management Network Support", 25),
+    ],
+    "Control System Health (CSH)": [
+        ("1 Overview", 7), ("2 CSH Server", 12), ("3 Network Configuration", 23),
+    ],
+    "GSM 3.0 Server (GE Standard Messages)": [
+        ("Chapter 1 Overview", 5), ("Chapter 2 Configuration", 7), ("Chapter 3 Runtime", 31),
+    ],
+    "WorkstationST Application — Mark V Feature": [
+        ("Mark V", 9), ("Mark V Controller", 9),
+    ],
+    "Mark V Ethernet Global Data (EGD)": [
+        ("1 Overview", 3), ("2 Data File Configuration", 4), ("3 Import to ToolboxST", 8),
+    ],
+    "ControlST Release Notes": [
+        ("1 Introduction", 19), ("2 V07.09.07 Release Notes", 21),
+        ("2.2 V07.09 Suite Components", 22),
+    ],
+    "ControlST Documentation Global Search": [
+        ("Install and Enable Windows Search Service", 1), ("Search Documentation", 7),
+    ],
+}
+
+
+def documento_componente(nome_componente: str) -> dict:
+    """
+    Restituisce il riferimento documentale completo (codice, revisione, titolo,
+    pagine) associato a un componente della suite ControlST/WorkstationST.
+    """
+    if nome_componente not in SUITE_CONTROLST_WORKSTATIONST:
+        raise ValueError(f"Componente non riconosciuto: {nome_componente}. "
+                         f"Disponibili: {list(SUITE_CONTROLST_WORKSTATIONST)}")
+    comp = SUITE_CONTROLST_WORKSTATIONST[nome_componente]
+    doc_code = comp["doc"]
+    doc = DOCUMENTI_CONTROLST[doc_code]
+    rev = f"{doc_code}{doc['rev']}" if doc["rev"] not in ("-", "") else doc_code
+    return {
+        "componente": nome_componente,
+        "categoria": comp["categoria"],
+        "funzione": comp["funzione"],
+        "documento": doc_code,
+        "documento_rev": rev,
+        "titolo": doc["titolo"],
+        "pagine": doc["pagine"],
+        "sezioni": SEZIONI_COMPONENTI.get(nome_componente, []),
+    }
+
+
+def componenti_per_categoria() -> dict:
+    """Raggruppa i componenti della suite per categoria funzionale (per la UI)."""
+    out: dict = {}
+    for nome, info in SUITE_CONTROLST_WORKSTATIONST.items():
+        out.setdefault(info["categoria"], []).append(nome)
+    return out
+
 
 # ------------------------------------------------------------------
 # 4. Specifiche tecniche schede selezionate (per i calcolatori)
@@ -344,3 +667,244 @@ def corrente_derating_relay_trly(tipo: str, T_amb_C: float) -> dict:
         "T_amb_C": T_amb_C,
         "MTBF_relay_anni": spec["MTBF_anni"],
     }
+
+
+# ==============================================================================
+# 6. Sensori di processo — conversioni per schede PRTD e PTCC
+# ==============================================================================
+
+# ------------------------------------------------------------------
+# 6.1 RTD (PRTD) e 6.2 Termocoppie (PTCC)
+# Le curve sensore (IEC 60751 / NIST ITS-90) sono definite UNA SOLA VOLTA in
+# strumentazione.py. Qui restano sottili adattatori che conservano l'API storica
+# usata dalla sezione Mark VIe della UI e dai test (consolidamento, niente
+# matematica duplicata).
+# ------------------------------------------------------------------
+RTD_RANGE_C = _stru.RTD_RANGE_C
+TC_ITS90 = _stru.TC_ITS90_DIRETTA   # alias retro-compatibile (tipi K, J)
+
+
+def rtd_resistenza(temp_C: float, R0: float = 100.0) -> dict:
+    """Resistenza RTD al platino (IEC 60751) — delega a strumentazione.pt100_t_a_r."""
+    return {"R_ohm": _stru.pt100_t_a_r(temp_C, R0), "R0": R0, "temp_C": temp_C}
+
+
+def rtd_temperatura(R_ohm: float, R0: float = 100.0) -> dict:
+    """Temperatura da resistenza RTD (IEC 60751) — delega a strumentazione.pt100_r_a_t."""
+    if R_ohm <= 0:
+        raise ValueError("R_ohm deve essere > 0.")
+    t = _stru.pt100_r_a_t(R_ohm, R0)["temperatura_C"]
+    return {"temp_C": t, "R_ohm": R_ohm, "R0": R0}
+
+
+def termocoppia_mv(tipo: str, temp_giunto_caldo_C: float, temp_giunto_freddo_C: float = 0.0) -> dict:
+    """F.e.m. termocoppia con CJC (ITS-90) — delega a strumentazione.termocoppia_gradi_a_mv."""
+    r = _stru.termocoppia_gradi_a_mv(temp_giunto_caldo_C, tipo, temp_giunto_freddo_C)
+    return {
+        "mV": r["mv"],
+        "mV_assoluto_rif0": r["mv_assoluto_rif0"],
+        "tipo": r["tipo"],
+        "T_giunto_caldo_C": temp_giunto_caldo_C,
+        "T_giunto_freddo_C": temp_giunto_freddo_C,
+    }
+
+
+def termocoppia_temp(tipo: str, mV_misurati: float, temp_giunto_freddo_C: float = 0.0) -> dict:
+    """
+    Temperatura del giunto caldo da f.e.m. misurata, con CJC. Inversione per
+    bisezione sul polinomio diretto ITS-90 di strumentazione (curva non duplicata).
+    """
+    tipo_u = tipo.upper()
+    if tipo_u not in _stru.TC_ITS90_DIRETTA:
+        raise ValueError(f"Tipo termocoppia non riconosciuto: {tipo}. Disponibili: {list(_stru.TC_ITS90_DIRETTA)}")
+    spec = _stru.TC_ITS90_DIRETTA[tipo_u]
+    v_target = mV_misurati + _stru._tc_emf_diretta(temp_giunto_freddo_C, tipo_u)
+
+    lo, hi = spec["range_C"]
+    f_lo = _stru._tc_emf_diretta(lo, tipo_u) - v_target
+    f_hi = _stru._tc_emf_diretta(hi, tipo_u) - v_target
+    if f_lo * f_hi > 0:
+        raise ValueError(f"F.e.m. {v_target:.3f} mV fuori campo per tipo {tipo_u} {spec['range_mV']} mV.")
+
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        f_mid = _stru._tc_emf_diretta(mid, tipo_u) - v_target
+        if abs(f_mid) < 1e-9 or (hi - lo) < 1e-7:
+            break
+        if f_lo * f_mid <= 0:
+            hi = mid
+        else:
+            lo, f_lo = mid, f_mid
+    return {
+        "temp_C": 0.5 * (lo + hi),
+        "tipo": tipo_u,
+        "mV_misurati": mV_misurati,
+        "T_giunto_freddo_C": temp_giunto_freddo_C,
+    }
+
+
+# ------------------------------------------------------------------
+# 6.3 Diagnostica segnale 4–20 mA (NAMUR NE43)
+# Soglie standard per segnalazione guasti sui loop analogici (PAIC/PHRA).
+# ------------------------------------------------------------------
+NAMUR_NE43 = {
+    "guasto_basso_max_mA": 3.6,   # ≤ 3.6 mA -> sotto-range / rottura sensore
+    "valido_min_mA": 3.8,
+    "valido_max_mA": 20.5,
+    "guasto_alto_min_mA": 21.0,   # ≥ 21.0 mA -> sovra-range / corto
+}
+
+
+def diagnostica_loop_420(corrente_mA: float, span_min: float = 0.0, span_max: float = 100.0) -> dict:
+    """
+    Diagnostica di un loop 4–20 mA secondo NAMUR NE43 e scalatura del valore
+    di processo. Riconosce rottura cavo, sotto/sovra-range e zona valida.
+    """
+    if span_max <= span_min:
+        raise ValueError("span_max deve essere > span_min.")
+
+    if corrente_mA <= 0.1:
+        stato = "Cavo interrotto / nessun segnale (≈0 mA)"
+        valido = False
+    elif corrente_mA <= NAMUR_NE43["guasto_basso_max_mA"]:
+        stato = "GUASTO: sotto-range / rottura sensore (≤3.6 mA)"
+        valido = False
+    elif corrente_mA >= NAMUR_NE43["guasto_alto_min_mA"]:
+        stato = "GUASTO: sovra-range / corto circuito (≥21 mA)"
+        valido = False
+    elif corrente_mA < NAMUR_NE43["valido_min_mA"] or corrente_mA > NAMUR_NE43["valido_max_mA"]:
+        stato = "Zona di allerta (oltre 4–20 mA ma entro soglie NE43)"
+        valido = True
+    else:
+        stato = "Segnale valido (4–20 mA)"
+        valido = True
+
+    pct = (corrente_mA - 4.0) / 16.0 * 100.0
+    valore = span_min + (pct / 100.0) * (span_max - span_min)
+    return {
+        "stato": stato,
+        "valido": valido,
+        "percentuale": pct,
+        "valore_processo": valore,
+        "corrente_mA": corrente_mA,
+    }
+
+
+# ==============================================================================
+# 7. Protezione velocità turbina — schede PTUR / PPRO / PGEN
+# Ingressi velocità a riluttanza/MPU da ruota fonica, campo 2 Hz – 20 kHz
+# (GEH-6721G — Primary/Emergency Turbine Protection).
+# ==============================================================================
+PTUR_FREQ_RANGE_HZ = (2.0, 20000.0)
+
+
+def velocita_da_frequenza(freq_hz: float, n_denti: int) -> dict:
+    """Velocità di rotazione [rpm] dalla frequenza impulsi di una ruota fonica."""
+    if freq_hz < 0 or n_denti <= 0:
+        raise ValueError("freq_hz ≥ 0 e n_denti > 0 richiesti.")
+    rpm = freq_hz * 60.0 / n_denti
+    return {
+        "rpm": rpm,
+        "freq_hz": freq_hz,
+        "n_denti": n_denti,
+        "in_campo_sensore": PTUR_FREQ_RANGE_HZ[0] <= freq_hz <= PTUR_FREQ_RANGE_HZ[1],
+    }
+
+
+def frequenza_da_velocita(rpm: float, n_denti: int) -> dict:
+    """Frequenza impulsi [Hz] da velocità [rpm] e numero di denti della ruota fonica."""
+    if rpm < 0 or n_denti <= 0:
+        raise ValueError("rpm ≥ 0 e n_denti > 0 richiesti.")
+    freq = rpm / 60.0 * n_denti
+    return {
+        "freq_hz": freq,
+        "rpm": rpm,
+        "n_denti": n_denti,
+        "in_campo_sensore": PTUR_FREQ_RANGE_HZ[0] <= freq <= PTUR_FREQ_RANGE_HZ[1],
+    }
+
+
+def trip_sovravelocita(rpm_nominale: float, n_denti: int, soglia_trip_pct: float = 110.0) -> dict:
+    """
+    Punto di trip di sovravelocità: velocità e frequenza impulsi di trip dato
+    il setpoint in % della velocità nominale (tipicamente 110 % per turbine GE).
+    """
+    if rpm_nominale <= 0 or n_denti <= 0:
+        raise ValueError("rpm_nominale > 0 e n_denti > 0 richiesti.")
+    if soglia_trip_pct <= 100.0:
+        raise ValueError("La soglia di trip deve essere > 100% della nominale.")
+
+    rpm_trip = rpm_nominale * soglia_trip_pct / 100.0
+    f_nom = rpm_nominale / 60.0 * n_denti
+    f_trip = rpm_trip / 60.0 * n_denti
+    return {
+        "rpm_nominale": rpm_nominale,
+        "rpm_trip": rpm_trip,
+        "freq_nominale_hz": f_nom,
+        "freq_trip_hz": f_trip,
+        "margine_rpm": rpm_trip - rpm_nominale,
+        "soglia_trip_pct": soglia_trip_pct,
+        "freq_trip_in_campo_sensore": PTUR_FREQ_RANGE_HZ[0] <= f_trip <= PTUR_FREQ_RANGE_HZ[1],
+    }
+
+
+# ==============================================================================
+# 8. Matrice di troubleshooting — sintomo → componente → dove guardare
+# Tutte le voci rimandano a sezioni effettivamente presenti nei manuali
+# della cartella Documentation/ (codice in DOCUMENTI_CONTROLST, pagina PDF).
+# ==============================================================================
+TROUBLESHOOTING = [
+    {"sintomo": "Una Feature WorkstationST non parte o è in errore",
+     "componente": "WorkstationST Service",
+     "dove": "Stato delle Feature nel WorkstationST Status Monitor; Detail Log",
+     "doc": "GEI-100623", "sezione": "3 WorkstationST Configuration and Monitoring", "pagina": 9},
+    {"sintomo": "Allarmi mancanti o non instradati ai client",
+     "componente": "Alarm Server",
+     "dove": "Diagnostic Messages e Log Files dell'Alarm Server",
+     "doc": "GEI-100626", "sezione": "11 Diagnostic Messages", "pagina": 21},
+    {"sintomo": "Client OPC UA non si connette / errori di certificato",
+     "componente": "OPC UA Server",
+     "dove": "Sezione Troubleshooting e Application Certificate Sharing",
+     "doc": "GEI-100828", "sezione": "2.5 Troubleshooting", "pagina": 9},
+    {"sintomo": "Dati HART non visibili nell'Asset Management System",
+     "componente": "HART Message Server (HMS)",
+     "dove": "Troubleshooting, Normal Operating Conditions e Message Log Files",
+     "doc": "GEI-100662", "sezione": "Troubleshooting", "pagina": 20},
+    {"sintomo": "Switch o porta di rete segnalata in allarme / link down",
+     "componente": "Network Monitor",
+     "dove": "Network Status and Troubleshooting; tabella stato switch/porte",
+     "doc": "GEI-100693", "sezione": "2.6 Network Status and Troubleshooting", "pagina": 15},
+    {"sintomo": "Comunicazione GSM verso DCS interrotta o con warning",
+     "componente": "GSM 3.0 Server",
+     "dove": "Error and Warning Messages; diagnostica GSM Spy e Detail Log",
+     "doc": "GEH-6757", "sezione": "Error and Warning Messages", "pagina": 22},
+    {"sintomo": "Variabili non aggiornate / non trovate nel Trender",
+     "componente": "Trender",
+     "dove": "Variable Status e selezione Data Sources",
+     "doc": "GEI-100795", "sezione": "2.8 Variable Status", "pagina": 28},
+    {"sintomo": "Dispositivi fieldbus non raggiungibili dal gateway",
+     "componente": "Device Manager Gateway",
+     "dove": "Monitor Status del gateway",
+     "doc": "GEI-100757", "sezione": "2.4 Monitor Status", "pagina": 29},
+    {"sintomo": "Import HMI/CIMPLICITY fallito o dati mancanti",
+     "componente": "HMI Configuration",
+     "dove": "HMI Importer Error and Log Files",
+     "doc": "GEI-100629", "sezione": "HMI Importer Error and Log Files", "pagina": 7},
+    {"sintomo": "Report storico non generato o con errori",
+     "componente": "Historian Report",
+     "dove": "Report Errors e configurazione automatica",
+     "doc": "GEI-100752", "sezione": "6.2 Report Errors", "pagina": 27},
+    {"sintomo": "Scambio dati EGD Mark V ↔ Mark VIe non funzionante",
+     "componente": "Mark V Ethernet Global Data (EGD)",
+     "dove": "Error Logs e configurazione file ToEGD/FromEGD",
+     "doc": "GEI-100853", "sezione": "2.3 Error Logs", "pagina": 7},
+]
+
+
+def cerca_troubleshooting(testo: str) -> list:
+    """Filtra la matrice di troubleshooting per testo libero (sintomo/componente/dove)."""
+    t = (testo or "").lower()
+    if not t:
+        return list(TROUBLESHOOTING)
+    return [v for v in TROUBLESHOOTING
+            if t in f"{v['sintomo']} {v['componente']} {v['dove']} {v['doc']} {v['sezione']}".lower()]

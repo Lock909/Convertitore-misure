@@ -309,6 +309,81 @@ class TestStrumentazione(unittest.TestCase):
         self.assertAlmostEqual(r["errore_assoluto"], 0.5, places=6)
         self.assertAlmostEqual(r["errore_relativo_pct"], 0.5 / 75.0 * 100.0, places=4)
 
+    # --- RTD generalizzato Pt1000 + CJC termocoppia (consolidamento) ---
+    def test_pt1000_round_trip(self):
+        R = strumentazione.pt100_t_a_r(100.0, R0=1000.0)
+        self.assertAlmostEqual(R, 1385.05, places=2)
+        self.assertAlmostEqual(strumentazione.pt100_r_a_t(R, R0=1000.0)["temperatura_C"], 100.0, places=3)
+
+    def test_tc_diretta_punti_noti(self):
+        self.assertAlmostEqual(strumentazione._tc_emf_diretta(1000.0, "K"), 41.276, places=3)
+        self.assertAlmostEqual(strumentazione._tc_emf_diretta(0.0, "K"), 0.0, places=3)
+        self.assertAlmostEqual(strumentazione._tc_emf_diretta(300.0, "J"), 16.327, places=3)
+
+    def test_tc_diretta_T_E_punti_noti(self):
+        # valori di riferimento NIST ITS-90
+        self.assertAlmostEqual(strumentazione._tc_emf_diretta(100.0, "T"), 4.279, places=3)
+        self.assertAlmostEqual(strumentazione._tc_emf_diretta(400.0, "T"), 20.872, places=3)
+        self.assertAlmostEqual(strumentazione._tc_emf_diretta(-200.0, "T"), -5.603, places=3)
+        self.assertAlmostEqual(strumentazione._tc_emf_diretta(200.0, "E"), 13.421, places=3)
+        self.assertAlmostEqual(strumentazione._tc_emf_diretta(1000.0, "E"), 76.373, places=3)
+        self.assertAlmostEqual(strumentazione._tc_emf_diretta(-200.0, "E"), -8.825, places=3)
+
+    def test_tc_cjc_inversa(self):
+        # f.e.m. a giunto caldo 500 °C con giunto freddo 25 °C, poi ricostruzione
+        for tipo in ("K", "J", "T", "E"):
+            t_caldo = 300.0   # entro il campo di tutti i tipi (T arriva a 400 °C)
+            v = strumentazione.termocoppia_gradi_a_mv(t_caldo, tipo, t_giunto_rif_C=25.0)["mv"]
+            r = strumentazione.termocoppia_mv_a_gradi(v, tipo, t_giunto_rif_C=25.0)
+            self.assertAlmostEqual(r["temperatura_C"], t_caldo, places=1, msg=tipo)
+
+    def test_tc_cjc_tipo_sconosciuto(self):
+        with self.assertRaises(ValueError):
+            strumentazione.termocoppia_mv_a_gradi(10.0, "S", t_giunto_rif_C=25.0)
+
+    # --- Taratura ---
+    def test_taratura_lineare(self):
+        # strumento che legge letto = 1.01*rif + 0.5
+        punti = [(0.0, 0.5), (50.0, 51.0), (100.0, 101.5)]
+        r = strumentazione.taratura(punti, grado=1)
+        self.assertAlmostEqual(r["R2"], 1.0, places=6)
+        # correzione riporta la lettura al valore vero
+        self.assertAlmostEqual(strumentazione.applica_taratura(r["coeff"], 101.5), 100.0, places=3)
+
+    def test_taratura_punti_insufficienti(self):
+        with self.assertRaises(ValueError):
+            strumentazione.taratura([(0.0, 0.0)], grado=2)
+
+    def test_taratura_polinomiale(self):
+        punti = [(0, 0.0), (25, 24.0), (50, 47.5), (75, 71.0), (100, 95.0)]
+        r = strumentazione.taratura(punti, grado=2)
+        self.assertEqual(len(r["coeff"]), 3)
+        self.assertGreater(r["R2"], 0.99)
+
+    def test_interpola_taratura(self):
+        tab = [(0.0, 0.1), (50.0, 50.2), (100.0, 100.4)]
+        self.assertAlmostEqual(strumentazione.interpola_taratura(tab, 25.0)["valore"], 25.15, places=3)
+        r = strumentazione.interpola_taratura(tab, 120.0, estrapola=True)
+        self.assertTrue(r["fuori_campo"])
+        with self.assertRaises(ValueError):
+            strumentazione.interpola_taratura(tab, 120.0, estrapola=False)
+
+    def test_caratterizza_rtd(self):
+        r = strumentazione.caratterizza_rtd([(0.0, 100.0), (100.0, 138.51)])
+        self.assertAlmostEqual(r["R0_effettivo"], 100.0, places=2)
+        self.assertAlmostEqual(r["alpha_effettivo"], 0.0038510, places=5)
+
+    def test_caratterizza_offset_tc(self):
+        # f.e.m. teoriche esatte -> offset nullo
+        v100 = strumentazione._tc_emf_diretta(100.0, "K")
+        v500 = strumentazione._tc_emf_diretta(500.0, "K")
+        r = strumentazione.caratterizza_offset_tc([(100.0, v100), (500.0, v500)], "K")
+        self.assertAlmostEqual(r["offset_medio_mV"], 0.0, places=6)
+
+    def test_guida_misura_struttura(self):
+        self.assertIn("RTD Pt100/Pt1000 (IEC 60751)", strumentazione.GUIDA_MISURA)
+        self.assertTrue(all(isinstance(v, list) and v for v in strumentazione.GUIDA_MISURA.values()))
+
 
 class TestResistenzaMateriali(unittest.TestCase):
     def test_sezione_rettangolare(self):
@@ -1396,6 +1471,133 @@ class TestMarkVIe(unittest.TestCase):
         self.assertIn("TMR", mv.ARCHITETTURE_RIDONDANZA)
         self.assertEqual(mv.ARCHITETTURE_RIDONDANZA["TMR"]["controllori"], 3)
         self.assertEqual(mv.ARCHITETTURE_RIDONDANZA["Simplex"]["controllori"], 1)
+
+    def test_suite_controlst_doc_validi(self):
+        # ogni componente deve puntare a un documento esistente nella raccolta
+        self.assertGreater(len(mv.SUITE_CONTROLST_WORKSTATIONST), 20)
+        for nome, info in mv.SUITE_CONTROLST_WORKSTATIONST.items():
+            self.assertIn(info["doc"], mv.DOCUMENTI_CONTROLST, nome)
+
+    def test_documento_componente(self):
+        r = mv.documento_componente("Trender")
+        self.assertEqual(r["documento"], "GEI-100795")
+        self.assertEqual(r["documento_rev"], "GEI-100795T")
+        self.assertEqual(r["pagine"], 48)
+        # sezioni capitolo->pagina presenti e con pagine valide
+        self.assertTrue(r["sezioni"])
+        for titolo, pag in r["sezioni"]:
+            self.assertIsInstance(titolo, str)
+            self.assertTrue(1 <= pag <= r["pagine"])
+
+    def test_sezioni_componenti_pagine_valide(self):
+        # ogni sezione deve riferirsi a una pagina entro il numero di pagine del doc
+        for nome in mv.SEZIONI_COMPONENTI:
+            ref = mv.documento_componente(nome)
+            for titolo, pag in ref["sezioni"]:
+                self.assertTrue(1 <= pag <= ref["pagine"], (nome, titolo, pag, ref["pagine"]))
+
+    def test_documento_componente_senza_revisione(self):
+        # GEI-100829 ha rev '-' -> documento_rev senza suffisso
+        r = mv.documento_componente("GSM 3.0 Server (GE Standard Messages)")
+        self.assertNotIn("-", r["documento_rev"].replace("GEH-", "").replace("GEI-", ""))
+
+    def test_documento_componente_invalido(self):
+        with self.assertRaises(ValueError):
+            mv.documento_componente("Componente inesistente")
+
+    def test_componenti_per_categoria(self):
+        cat = mv.componenti_per_categoria()
+        self.assertIn("Comunicazione OPC", cat)
+        # tutti i componenti devono comparire una sola volta nei gruppi
+        totale = sum(len(v) for v in cat.values())
+        self.assertEqual(totale, len(mv.SUITE_CONTROLST_WORKSTATIONST))
+
+    # --- RTD IEC 60751 ---
+    def test_rtd_resistenza_punti_noti(self):
+        # valori di riferimento Pt100 (IEC 60751)
+        self.assertAlmostEqual(mv.rtd_resistenza(0)["R_ohm"], 100.000, places=3)
+        self.assertAlmostEqual(mv.rtd_resistenza(100)["R_ohm"], 138.505, places=3)
+        self.assertAlmostEqual(mv.rtd_resistenza(-100)["R_ohm"], 60.256, places=3)
+        self.assertAlmostEqual(mv.rtd_resistenza(850)["R_ohm"], 390.481, places=3)
+
+    def test_rtd_andata_ritorno(self):
+        for t in (-200, -50, 0, 250, 600, 850):
+            R = mv.rtd_resistenza(t)["R_ohm"]
+            self.assertAlmostEqual(mv.rtd_temperatura(R)["temp_C"], t, places=4)
+
+    def test_rtd_pt1000(self):
+        self.assertAlmostEqual(mv.rtd_resistenza(0, R0=1000.0)["R_ohm"], 1000.0, places=2)
+
+    def test_rtd_fuori_campo(self):
+        with self.assertRaises(ValueError):
+            mv.rtd_resistenza(900)
+
+    # --- Termocoppie ITS-90 ---
+    def test_termocoppia_K_punti_noti(self):
+        self.assertAlmostEqual(mv.termocoppia_mv("K", 0)["mV_assoluto_rif0"], 0.000, places=3)
+        self.assertAlmostEqual(mv.termocoppia_mv("K", 100)["mV_assoluto_rif0"], 4.096, places=3)
+        self.assertAlmostEqual(mv.termocoppia_mv("K", 1000)["mV_assoluto_rif0"], 41.276, places=3)
+        self.assertAlmostEqual(mv.termocoppia_mv("K", -200)["mV_assoluto_rif0"], -5.891, places=3)
+
+    def test_termocoppia_J_punti_noti(self):
+        self.assertAlmostEqual(mv.termocoppia_mv("J", 100)["mV_assoluto_rif0"], 5.269, places=3)
+        self.assertAlmostEqual(mv.termocoppia_mv("J", 300)["mV_assoluto_rif0"], 16.327, places=3)
+        self.assertAlmostEqual(mv.termocoppia_mv("J", 700)["mV_assoluto_rif0"], 39.132, places=3)
+
+    def test_termocoppia_andata_ritorno(self):
+        for tipo in ("J", "K"):
+            for t in (50, 250, 600):
+                v = mv.termocoppia_mv(tipo, t)["mV_assoluto_rif0"]
+                self.assertAlmostEqual(mv.termocoppia_temp(tipo, v)["temp_C"], t, places=2)
+
+    def test_termocoppia_cjc(self):
+        # con CJC: misura a giunto freddo 25 °C deve ricostruire il giunto caldo
+        v = mv.termocoppia_mv("K", 500, temp_giunto_freddo_C=25.0)["mV"]
+        self.assertAlmostEqual(mv.termocoppia_temp("K", v, temp_giunto_freddo_C=25.0)["temp_C"], 500.0, places=2)
+
+    def test_termocoppia_tipo_invalido(self):
+        with self.assertRaises(ValueError):
+            mv.termocoppia_mv("Z", 100)
+
+    # --- Diagnostica 4-20 mA (NE43) ---
+    def test_ne43_stati(self):
+        self.assertFalse(mv.diagnostica_loop_420(3.5)["valido"])
+        self.assertFalse(mv.diagnostica_loop_420(21.5)["valido"])
+        self.assertTrue(mv.diagnostica_loop_420(12.0)["valido"])
+        self.assertFalse(mv.diagnostica_loop_420(0.05)["valido"])
+
+    def test_ne43_scalatura(self):
+        r = mv.diagnostica_loop_420(12.0, 0.0, 200.0)
+        self.assertAlmostEqual(r["valore_processo"], 100.0, places=6)
+        self.assertAlmostEqual(r["percentuale"], 50.0, places=6)
+
+    # --- Velocità / sovravelocità turbina ---
+    def test_velocita_frequenza_andata_ritorno(self):
+        f = mv.frequenza_da_velocita(3000, 60)["freq_hz"]
+        self.assertAlmostEqual(f, 3000.0, places=6)
+        self.assertAlmostEqual(mv.velocita_da_frequenza(f, 60)["rpm"], 3000.0, places=6)
+
+    def test_trip_sovravelocita(self):
+        r = mv.trip_sovravelocita(3000, 60, 110)
+        self.assertAlmostEqual(r["rpm_trip"], 3300.0, places=6)
+        self.assertAlmostEqual(r["freq_trip_hz"], 3300.0, places=6)
+        self.assertAlmostEqual(r["margine_rpm"], 300.0, places=6)
+
+    def test_trip_soglia_invalida(self):
+        with self.assertRaises(ValueError):
+            mv.trip_sovravelocita(3000, 60, 95)
+
+    # --- Troubleshooting ---
+    def test_troubleshooting_doc_validi(self):
+        self.assertGreaterEqual(len(mv.TROUBLESHOOTING), 10)
+        for v in mv.TROUBLESHOOTING:
+            self.assertIn(v["doc"], mv.DOCUMENTI_CONTROLST, v["sintomo"])
+            self.assertTrue(1 <= v["pagina"] <= mv.DOCUMENTI_CONTROLST[v["doc"]]["pagine"])
+
+    def test_troubleshooting_ricerca(self):
+        self.assertEqual(len(mv.cerca_troubleshooting("")), len(mv.TROUBLESHOOTING))
+        self.assertTrue(all("opc" in f"{v['sintomo']} {v['componente']} {v['dove']}".lower()
+                            for v in mv.cerca_troubleshooting("OPC")))
 
 
 if __name__ == "__main__":

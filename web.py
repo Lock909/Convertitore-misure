@@ -1,5 +1,6 @@
 ﻿import math
 
+import pandas as pd
 import streamlit as st
 try:
     import plotly.graph_objects as go
@@ -71,8 +72,15 @@ h3 { font-size: 1.05rem !important; color: #555; }
 /* ── Sidebar ─────────────────────────────────────────── */
 [data-testid="stSidebar"] { background: #0f1117; }
 [data-testid="stSidebar"] * { color: #e8eaf0 !important; }
-[data-testid="stSidebar"] .stRadio label { font-size: 0.92rem; padding: 4px 0; }
+[data-testid="stSidebar"] .stRadio label { font-size: 0.92rem; padding: 6px 8px; border-radius: 6px; }
 [data-testid="stSidebar"] .stRadio [data-baseweb="radio"] { gap: 0.3rem; }
+[data-testid="stSidebar"] .stRadio label:has(input:checked) {
+    background: #1f6feb22;
+    border-left: 3px solid #1f6feb;
+}
+[data-testid="stSidebar"] .stTextInput input {
+    background: #1a1d27; border: 1px solid #2a2e3a; color: #e8eaf0 !important;
+}
 
 /* ── Card per sezione ────────────────────────────────── */
 .ti-card {
@@ -126,6 +134,19 @@ h3 { font-size: 1.05rem !important; color: #555; }
 .home-card .icon { font-size: 2rem; margin-bottom: 0.4rem; }
 .home-card .label { font-weight: 700; font-size: 0.9rem; color: #222; }
 .home-card .count { font-size: 0.75rem; color: #888; margin-top: 2px; }
+
+/* ── Responsive mobile ──────────────────────────────── */
+@media (max-width: 640px) {
+    [data-testid="block-container"] { padding-top: 0.8rem; padding-left: 0.8rem; padding-right: 0.8rem; }
+    h1 { font-size: 1.3rem !important; }
+    [data-testid="stSidebar"] { min-width: 80vw !important; }
+
+    /* Selectbox lunghi: popover più basso per lasciare spazio alla tastiera
+       virtuale, opzioni piu' alte per un tocco preciso col dito. */
+    div[data-baseweb="popover"] ul { max-height: 38vh !important; }
+    div[data-baseweb="popover"] li { padding-top: 10px !important; padding-bottom: 10px !important; }
+    button { min-height: 2.6rem; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -164,6 +185,110 @@ def _barra_utilizzo(valore_pct: float, etichetta: str = "Utilizzo"):
     )
 
 
+# ── Rilevamento dispositivo ────────────────────────────────────────────────────
+# Niente JS: lo User-Agent arriva già nell'header della request, quindi il ramo
+# mobile/desktop si decide prima di renderizzare qualunque cosa (zero flicker).
+
+def is_mobile() -> bool:
+    try:
+        ua = st.context.headers.get("User-Agent", "").lower()
+    except Exception:
+        ua = ""
+    return any(k in ua for k in ("android", "iphone", "ipad", "mobile"))
+
+
+_IS_MOBILE = is_mobile()
+
+
+# ── Indice globale strumenti (per ricerca) ─────────────────────────────────────
+# Copia delle liste passate ai selectbox "Seleziona Strumento" di ogni sezione:
+# se si aggiunge un'opzione lì, aggiungerla anche qui per mantenerla cercabile.
+
+def _build_tool_index() -> list:
+    idx = []
+
+    def _add(tools, sezione, select_key):
+        for t in tools:
+            idx.append((t, sezione, select_key))
+
+    _add(idraulica.ottieni_categorie().keys(), "⚖️  Conversioni", "conv_cat")
+
+    _add([
+        "Legge di Ohm", "Analisi Potenze e Corrente", "Convertitore Potenze (kW / HP / kVA)",
+        "Rendimento Motore (P_out -> P_in -> Corrente)", "Rifasamento Industriale (kVAR)",
+        "Caduta di Tensione", "Corrente di Cortocircuito (Icc)", "Dimensionamento Protezioni",
+        "Carico Trifase Equilibrato", "Carico Trifase Non Equilibrato", "Trasformatore",
+        "Circuito RLC", "Armonie e THD", "Batterie e UPS", "Dissipatore Termico",
+        "Impianto di Terra", "Selettività Protezioni", "Fotovoltaico", "Gruppo Elettrogeno",
+        "Quadro Elettrico — Dissipazione", "Rifasamento Condensatori",
+        "Caduta Tensione BT (CEI 64-8)", "Avviamento Motore Asincrono",
+        "Motore Asincrono — Dati di Targa", "Motore Asincrono — Classi IE (Efficienza)",
+    ], "⚡  Calcoli Elettrici", "elett_tipo")
+
+    _add([
+        "Info CPU e Memoria RX3i", "Info Modulo Analogico", "Tipi Dati",
+        "Scalatura Analogica (Raw -> Engineering)", "Scalatura Inversa (Engineering -> Raw / Setpoint)",
+        "Esplosione Parola nei Bit", "Composizione WORD da Bit", "Calcolo Memoria RX3i",
+    ], "🤖  PLC e Automazione", "plc_tool")
+
+    _add([
+        "Conversione Grandezze Vibrazionali", "Classificazione ISO 10816 (Severita)",
+        "Frequenza Naturale Massa-Molla", "Velocita Critica Albero", "Squilibrio Residuo ISO 1940",
+    ], "〜  Vibrazioni", "vib_tool")
+
+    _add([
+        "Trasmissione Semplice (ingranaggi / cinghia / catena)", "Riduttore a Piu Stadi",
+        "Geometria Cinghia", "Potenza-Coppia-Velocita", "Punto di Lavoro Pompa", "Potenza Pompa",
+        "NPSH Disponibile", "Numero Specifico di Giri (ns)", "Proprieta Sezione", "Calcolo Trave",
+        "Verifica a Flessione", "Trazione / Compressione", "Perdite di Carico Concentrate",
+        "Perdite di Carico Distribuite (Darcy-Weisbach)", "Bulloneria — Serraggio",
+        "Bulloneria — Verifica", "Bulloneria — Flangia", "Nastri Trasportatori",
+        "Cuscinetti — Durata L10 (ISO 281)", "Molle Meccaniche", "Ruote Dentate — Verifica Lewis",
+        "Alberi — Torsione e Flessione", "Saldature a Cordone d'Angolo",
+        "Tubazione in Pressione (EN 13480)",
+    ], "🔩  Meccanica", "mec_tool")
+
+    _add([
+        "Converti Portata Normalizzata", "Caduta di Pressione Tubazione Aria",
+        "Dimensionamento Serbatoio", "Potenza Compressore", "Segnale mA ↔ Tensione",
+        "Termocoppia mV → °C (NIST)", "Pt100 — Temperatura ↔ Resistenza",
+        "Errore di Misura e Incertezza", "Taratura Strumento (generica)",
+        "Interpolazione da Certificato di Taratura", "Caratterizzazione RTD (R0/α reali)",
+        "Offset Taratura Termocoppia", "Guida — Come effettuare una misura corretta",
+        "Valvola di Controllo Cv/Kv", "Trasduttore di Pressione 4-20mA",
+    ], "🔧  Pneumatica & Strumenti", "strum_tool")
+
+    _add([
+        "Scambiatori — Bilancio Termico", "Scambiatori — Area LMTD", "Scambiatori — Metodo NTU-ε",
+        "Illuminotecnica — Numero Lampade", "Illuminotecnica — Indice Locale",
+        "Illuminotecnica — Fattore di Manutenzione MF", "Illuminotecnica — Potenza e LENI",
+        "Isolamento Termico — Parete Piana", "Isolamento Termico — Tubo Cilindrico",
+        "Serbatoi — Volume e Pressione", "Serbatoi — Svuotamento (Torricelli)",
+        "Condotte Aria HVAC",
+    ], "🌡️  Termotecnica & Impianti", "termo_tool")
+
+    _add([
+        "Rumore — Somma Sorgenti", "Rumore — LEX,8h Esposizione", "Rumore — Verifica DPI (SNR)",
+        "Rumore — Attenuazione per Distanza", "Performance Level — EN ISO 13849",
+    ], "🔒  Sicurezza & Utilities", "sic_tool")
+
+    _add([
+        "Riferimento — Schede I/O", "Riferimento — Architetture di Ridondanza",
+        "Riferimento — Terminologia ControlST/ToolboxST", "Riferimento — Suite ControlST / WorkstationST",
+        "Riferimento — Troubleshooting (sintomo → manuale)", "Calcolo — Scalatura Canale PAIC",
+        "Calcolo — Voting TMR (2oo3)", "Calcolo — MTBF Serie (Simplex)",
+        "Calcolo — Disponibilità TMR 2oo3", "Calcolo — Corrente Assorbita TBCI",
+        "Calcolo — Derating Relè TRLYH1x", "Calcolo — RTD Pt100/Pt1000 (IEC 60751)",
+        "Calcolo — Termocoppia (ITS-90)", "Calcolo — Diagnostica Loop 4–20 mA (NE43)",
+        "Calcolo — Velocità / Sovravelocità Turbina",
+    ], "🎛️  Mark VI/VIe & ToolboxST", "mv_tool")
+
+    return idx
+
+
+_TOOL_INDEX = _build_tool_index()
+
+
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 # Intercetta la navigazione dalle card Home PRIMA che il radio venga renderizzato.
 # I bottoni scrivono su "_nav_goto"; qui lo trasferiamo su "sidebar_cat" e lo puliamo.
@@ -186,12 +311,37 @@ if "_nav_goto" in st.session_state:
     if dest in _SEZIONI:
         st.session_state["sidebar_cat"] = dest
 
+if "_nav_tool_key" in st.session_state:
+    _tk = st.session_state.pop("_nav_tool_key")
+    _tv = st.session_state.pop("_nav_tool_val", None)
+    if _tk and _tv is not None:
+        st.session_state[_tk] = _tv
+
 with st.sidebar:
     st.markdown("## ⚙️ Tool Industriale")
     st.markdown("---")
+
+    filtro_sez = st.text_input(
+        "Cerca sezione",
+        key="sidebar_search",
+        placeholder="🔎 Cerca sezione...",
+        label_visibility="collapsed",
+    )
+    _sezioni_filtrate = (
+        [s for s in _SEZIONI if filtro_sez.lower() in s.lower()] if filtro_sez else _SEZIONI
+    )
+    if "🏠  Home" not in _sezioni_filtrate and not filtro_sez:
+        _sezioni_filtrate = _SEZIONI
+    if not _sezioni_filtrate:
+        st.caption("Nessuna sezione trovata.")
+        _sezioni_filtrate = _SEZIONI
+
+    if st.session_state.get("sidebar_cat") not in _sezioni_filtrate:
+        st.session_state["sidebar_cat"] = _sezioni_filtrate[0]
+
     categoria = st.radio(
         "Sezione",
-        _SEZIONI,
+        _sezioni_filtrate,
         key="sidebar_cat",
         label_visibility="collapsed",
     )
@@ -214,7 +364,14 @@ _NAV_MAP = {
 
 if categoria == "🏠  Home":
     st.title("⚙️ Strumento Multifunzione Industriale")
-    st.markdown("Calcoli tecnici per ingegneria industriale. Clicca una sezione per iniziare.")
+    st.markdown("Calcoli tecnici per ingegneria industriale. Cerca o clicca una sezione per iniziare.")
+
+    filtro_home = st.text_input(
+        "Cerca uno strumento",
+        key="home_search",
+        placeholder="🔎 Cerca uno strumento... (es. motori, vibrazioni, PLC)",
+        label_visibility="collapsed",
+    )
     st.markdown("---")
 
     _HOME_CARDS = [
@@ -229,9 +386,36 @@ if categoria == "🏠  Home":
         ("🎛️", "Mark VI/VIe",          "🎛️  Mark VI/VIe & ToolboxST", "Schede I/O, TMR, ToolboxST",    "GEH-6721"),
     ]
 
-    cols = st.columns(4)
-    for i, (icon, label, nav_key, desc, norma) in enumerate(_HOME_CARDS):
-        with cols[i % 4]:
+    if filtro_home:
+        f = filtro_home.lower()
+        _cards_show = [c for c in _HOME_CARDS if f in c[1].lower() or f in c[3].lower()]
+        _tool_matches = [t for t in _TOOL_INDEX if f in t[0].lower()]
+    else:
+        _cards_show = _HOME_CARDS
+        _tool_matches = []
+
+    if filtro_home and _tool_matches:
+        st.markdown(f"**Strumenti trovati ({len(_tool_matches)})**")
+        for j, (nome_tool, sez, sel_key) in enumerate(_tool_matches[:15]):
+            c1, c2 = st.columns([5, 1])
+            with c1:
+                st.markdown(f"🔍 **{nome_tool}**  \n<span style='color:#888;font-size:0.78rem'>{sez.strip()}</span>",
+                            unsafe_allow_html=True)
+            with c2:
+                if st.button("Apri", key=f"tool_match_{j}", use_container_width=True):
+                    st.session_state["_nav_goto"] = sez
+                    st.session_state["_nav_tool_key"] = sel_key
+                    st.session_state["_nav_tool_val"] = nome_tool
+                    st.rerun()
+        st.markdown("---")
+
+    if filtro_home and not _cards_show and not _tool_matches:
+        st.info("Nessuno strumento corrisponde alla ricerca.")
+
+    n_cols = 1 if _IS_MOBILE else 4
+    cols = st.columns(n_cols)
+    for i, (icon, label, nav_key, desc, norma) in enumerate(_cards_show):
+        with cols[i % n_cols]:
             st.markdown(
                 f'<div style="border:1px solid #e0e4ee;border-radius:10px;padding:0.8rem 0.7rem 0.6rem;'
                 f'text-align:center;background:#fff;margin-bottom:0.5rem;">'
@@ -2884,6 +3068,11 @@ elif categoria == "🔧  Pneumatica & Strumenti":
             "Termocoppia mV → °C (NIST)",
             "Pt100 — Temperatura ↔ Resistenza",
             "Errore di Misura e Incertezza",
+            "Taratura Strumento (generica)",
+            "Interpolazione da Certificato di Taratura",
+            "Caratterizzazione RTD (R0/α reali)",
+            "Offset Taratura Termocoppia",
+            "Guida — Come effettuare una misura corretta",
             "Valvola di Controllo Cv/Kv",
             "Trasduttore di Pressione 4-20mA",
         ],
@@ -3157,6 +3346,119 @@ elif categoria == "🔧  Pneumatica & Strumenti":
                 except (ValueError, ZeroDivisionError) as e:
                     st.error(str(e))
 
+    elif tool_strum == "Taratura Strumento (generica)":
+        st.subheader("Taratura strumento — curva di correzione (generica)")
+        st.caption("Inserisci i punti di taratura: **Riferimento** = valore vero del campione, "
+                   "**Letto** = valore indicato dallo strumento. Vale per qualsiasi grandezza.")
+        col1, col2 = st.columns(2)
+        with col1:
+            grado_cal = st.selectbox("Modello di fit:", ["Lineare (zero/span)", "Polinomiale grado 2", "Polinomiale grado 3"], key="cal_grado")
+        with col2:
+            unita_cal = st.text_input("Unità di misura (etichetta):", value="", key="cal_unita")
+        grado_map = {"Lineare (zero/span)": 1, "Polinomiale grado 2": 2, "Polinomiale grado 3": 3}
+        g_cal = grado_map[grado_cal]
+
+        df_default = pd.DataFrame({"Riferimento": [0.0, 50.0, 100.0], "Letto": [0.0, 50.0, 100.0]})
+        df_cal = st.data_editor(df_default, num_rows="dynamic", key="cal_editor",
+                                use_container_width=True)
+        if st.button("Calcola Taratura", key="cal_btn"):
+            try:
+                punti = [(float(r["Riferimento"]), float(r["Letto"]))
+                         for _, r in df_cal.iterrows()
+                         if r["Riferimento"] is not None and r["Letto"] is not None]
+                res = strumentazione.taratura(punti, g_cal)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("R²", f"{res['R2']:.6f}")
+                c2.metric("Errore max strumento", f"{res['errore_max_raw']:.4g} {unita_cal}".strip())
+                c3.metric("Errore residuo (corretto)", f"{res['errore_max_residuo']:.4g} {unita_cal}".strip())
+                if res["span"] > 0:
+                    st.caption(f"Errore strumento {res['errore_max_raw_pct_fs']:.3f}% FS → "
+                               f"dopo correzione {res['errore_max_residuo_pct_fs']:.3f}% FS (span {res['span']:.4g}).")
+                if g_cal == 1:
+                    st.info(f"Correzione lineare:  vero = {res['pendenza']:.6f} · letto + ({res['offset']:.6f})")
+                else:
+                    st.info("Coefficienti correzione (grado decrescente): "
+                            + ", ".join(f"{c:.6g}" for c in res["coeff"]))
+                st.session_state["cal_coeff"] = res["coeff"]
+
+            except (ValueError, TypeError) as e:
+                st.error(str(e))
+
+        if "cal_coeff" in st.session_state:
+            st.markdown("**Applica la correzione a una nuova lettura**")
+            letto_new = st.number_input("Valore letto dallo strumento:", value=0.0, key="cal_apply_in")
+            if st.button("Correggi Lettura", key="cal_apply_btn"):
+                corretto = strumentazione.applica_taratura(st.session_state["cal_coeff"], letto_new)
+                st.success(f"Valore corretto: **{corretto:.6g} {unita_cal}**".strip())
+
+    elif tool_strum == "Interpolazione da Certificato di Taratura":
+        st.subheader("Interpolazione da tabella di taratura (certificato)")
+        st.caption("Tabella **Ingresso → Valore corretto** (dal certificato del sensore/campione). "
+                   "Interpolazione lineare; fuori campo è possibile estrapolare (segnalato).")
+        df_def_int = pd.DataFrame({"Ingresso": [0.0, 50.0, 100.0], "Valore": [0.0, 50.2, 100.4]})
+        df_int = st.data_editor(df_def_int, num_rows="dynamic", key="int_editor", use_container_width=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            x_int = st.number_input("Ingresso da convertire:", value=25.0, key="int_x")
+        with col2:
+            estrap = st.checkbox("Permetti estrapolazione fuori campo", value=True, key="int_estrap")
+        if st.button("Interpola", key="int_btn"):
+            try:
+                tab = [(float(r["Ingresso"]), float(r["Valore"]))
+                       for _, r in df_int.iterrows()
+                       if r["Ingresso"] is not None and r["Valore"] is not None]
+                res = strumentazione.interpola_taratura(tab, x_int, estrap)
+                st.success(f"Valore corretto: **{res['valore']:.6g}**")
+                if res["fuori_campo"]:
+                    st.warning(f"⚠️ Ingresso fuori dal campo tarato {res['campo']}: valore estrapolato, meno affidabile.")
+            except (ValueError, TypeError) as e:
+                st.error(str(e))
+
+    elif tool_strum == "Caratterizzazione RTD (R0/α reali)":
+        st.subheader("Caratterizzazione RTD — R0 e α effettivi dai punti di taratura")
+        st.caption("Punti **Temperatura [°C] → Resistenza [Ω]**. Regressione R = R0·(1 + α·T), "
+                   "confronto con α nominale IEC 60751 (0,003851 °C⁻¹).")
+        df_def_rtd = pd.DataFrame({"Temperatura_C": [0.0, 100.0, 200.0], "Resistenza_ohm": [100.0, 138.5, 175.84]})
+        df_rtd = st.data_editor(df_def_rtd, num_rows="dynamic", key="rtdcar_editor", use_container_width=True)
+        if st.button("Caratterizza RTD", key="rtdcar_btn"):
+            try:
+                punti = [(float(r["Temperatura_C"]), float(r["Resistenza_ohm"]))
+                         for _, r in df_rtd.iterrows()
+                         if r["Temperatura_C"] is not None and r["Resistenza_ohm"] is not None]
+                res = strumentazione.caratterizza_rtd(punti)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("R0 effettivo", f"{res['R0_effettivo']:.4f} Ω")
+                c2.metric("α effettivo", f"{res['alpha_effettivo']:.6f} °C⁻¹")
+                c3.metric("Scarto α vs nominale", f"{res['scarto_alpha_pct']:+.2f} %")
+            except (ValueError, TypeError) as e:
+                st.error(str(e))
+
+    elif tool_strum == "Offset Taratura Termocoppia":
+        st.subheader("Offset di taratura termocoppia (vs ITS-90)")
+        st.caption("Punti **Temperatura riferimento [°C] → f.e.m. letta [mV]**. "
+                   "Confronto con la f.e.m. teorica ITS-90 (tipi K, J).")
+        tipo_off = st.selectbox("Tipo termocoppia:", strumentazione.tipi_termocoppia_diretta(), key="off_tipo")
+        df_def_off = pd.DataFrame({"Temperatura_C": [100.0, 500.0], "mV_letto": [4.15, 20.70]})
+        df_off = st.data_editor(df_def_off, num_rows="dynamic", key="off_editor", use_container_width=True)
+        if st.button("Calcola Offset", key="off_btn"):
+            try:
+                punti = [(float(r["Temperatura_C"]), float(r["mV_letto"]))
+                         for _, r in df_off.iterrows()
+                         if r["Temperatura_C"] is not None and r["mV_letto"] is not None]
+                res = strumentazione.caratterizza_offset_tc(punti, tipo_off)
+                c1, c2 = st.columns(2)
+                c1.metric("Offset medio", f"{res['offset_medio_mV']:.4f} mV")
+                c2.metric("Offset max", f"{res['offset_max_mV']:.4f} mV")
+            except (ValueError, TypeError) as e:
+                st.error(str(e))
+
+    elif tool_strum == "Guida — Come effettuare una misura corretta":
+        st.subheader("Guida — Come effettuare una misura corretta")
+        st.caption("Buone pratiche metrologiche (IEC 60751, IEC 60584, ITS-90, GUM).")
+        for sezione, punti in strumentazione.GUIDA_MISURA.items():
+            with st.expander(sezione):
+                for p in punti:
+                    st.markdown(f"- {p}")
 
 elif categoria == "🌡️  Termotecnica & Impianti":
     _card_open("termo", "🌡️ Termotecnica & Impianti", "EN 12464-1 / ISO 15547")
@@ -3730,12 +4032,18 @@ elif categoria == "🎛️  Mark VI/VIe & ToolboxST":
             "Riferimento — Schede I/O",
             "Riferimento — Architetture di Ridondanza",
             "Riferimento — Terminologia ControlST/ToolboxST",
+            "Riferimento — Suite ControlST / WorkstationST",
+            "Riferimento — Troubleshooting (sintomo → manuale)",
             "Calcolo — Scalatura Canale PAIC",
             "Calcolo — Voting TMR (2oo3)",
             "Calcolo — MTBF Serie (Simplex)",
             "Calcolo — Disponibilità TMR 2oo3",
             "Calcolo — Corrente Assorbita TBCI",
             "Calcolo — Derating Relè TRLYH1x",
+            "Calcolo — RTD Pt100/Pt1000 (IEC 60751)",
+            "Calcolo — Termocoppia (ITS-90)",
+            "Calcolo — Diagnostica Loop 4–20 mA (NE43)",
+            "Calcolo — Velocità / Sovravelocità Turbina",
         ],
         key="mv_tool",
     )
@@ -3777,6 +4085,60 @@ elif categoria == "🎛️  Mark VI/VIe & ToolboxST":
         st.subheader("Struttura del manuale GEH-6700 (capitoli confermati)")
         for cap, contenuto in mv.STRUTTURA_GEH6700_TOOLBOXST.items():
             st.markdown(f"- **{cap}**: {contenuto}")
+
+    elif tool_mv == "Riferimento — Suite ControlST / WorkstationST":
+        st.subheader("Suite software ControlST / WorkstationST — componenti")
+        st.caption("Fonti: manuali GE Vernova / GE Energy presenti nella cartella Documentation/ "
+                   "(codice GEH/GEI/GHT + revisione indicati per ciascun componente). "
+                   "WorkstationST è la piattaforma software lato operatore della famiglia Mark VIe.")
+
+        filtro_sw = st.text_input("Filtra per componente, categoria o funzione:", key="mv_sw_filtro")
+        per_cat = mv.componenti_per_categoria()
+        n_mostrati = 0
+        for categoria, componenti in per_cat.items():
+            righe_cat = []
+            for nome in componenti:
+                ref = mv.documento_componente(nome)
+                blob = f"{nome} {categoria} {ref['funzione']} {ref['documento_rev']} {ref['titolo']}".lower()
+                if filtro_sw and filtro_sw.lower() not in blob:
+                    continue
+                righe_cat.append(ref)
+            if not righe_cat:
+                continue
+            st.markdown(f"#### {categoria}")
+            for ref in righe_cat:
+                st.markdown(
+                    f"**{ref['componente']}** — {ref['funzione']}  \n"
+                    f"<small>📄 {ref['documento_rev']} · {ref['titolo']} · {ref['pagine']} pag.</small>",
+                    unsafe_allow_html=True,
+                )
+                if ref["sezioni"]:
+                    sez = "  ·  ".join(f"{titolo} (p. {pag})" for titolo, pag in ref["sezioni"])
+                    st.markdown(f"<small>🔖 {sez}</small>", unsafe_allow_html=True)
+                n_mostrati += 1
+        st.caption(f"{n_mostrati} componenti mostrati su {len(mv.SUITE_CONTROLST_WORKSTATIONST)} totali.")
+
+        st.markdown("---")
+        with st.expander(f"📚 Indice documenti disponibili nella raccolta ({len(mv.DOCUMENTI_CONTROLST)} manuali)"):
+            doc_rows = []
+            for code, d in mv.DOCUMENTI_CONTROLST.items():
+                sigla = f"{code}{d['rev']}" if d["rev"] not in ("-", "") else code
+                doc_rows.append({"Documento": sigla, "Titolo": d["titolo"], "Pagine": d["pagine"]})
+            st.table(doc_rows)
+
+    elif tool_mv == "Riferimento — Troubleshooting (sintomo → manuale)":
+        st.subheader("Matrice di troubleshooting ControlST / WorkstationST")
+        st.caption("Ogni voce rimanda alla sezione e pagina del manuale presente nella cartella Documentation/.")
+        filtro_ts = st.text_input("Filtra per sintomo, componente o area:", key="mv_ts_filtro")
+        voci = mv.cerca_troubleshooting(filtro_ts)
+        for v in voci:
+            doc = mv.DOCUMENTI_CONTROLST.get(v["doc"], {})
+            rev = f"{v['doc']}{doc.get('rev','')}" if doc.get("rev") not in (None, "-", "") else v["doc"]
+            with st.expander(f"⚠️ {v['sintomo']}"):
+                st.markdown(f"**Componente:** {v['componente']}")
+                st.markdown(f"**Dove guardare:** {v['dove']}")
+                st.markdown(f"<small>📄 {rev} · {v['sezione']} (p. {v['pagina']})</small>", unsafe_allow_html=True)
+        st.caption(f"{len(voci)} voci su {len(mv.TROUBLESHOOTING)} totali.")
 
     elif tool_mv == "Calcolo — Scalatura Canale PAIC":
         st.subheader("Scalatura canale analogico PAIC (GEH-6721G p.43)")
@@ -3870,7 +4232,7 @@ elif categoria == "🎛️  Mark VI/VIe & ToolboxST":
             except ValueError as e:
                 st.error(str(e))
 
-    else:  # Derating Relè TRLYH1x
+    elif tool_mv == "Calcolo — Derating Relè TRLYH1x":
         st.subheader("Derating corrente relè TRLYH1x vs temperatura ambiente")
         col1, col2 = st.columns(2)
         with col1:
@@ -3882,6 +4244,127 @@ elif categoria == "🎛️  Mark VI/VIe & ToolboxST":
             c1, c2 = st.columns(2)
             c1.metric("Corrente ammissibile", f"{r['I_ammissibile_A']:.2f} A")
             c2.metric("MTBF relè", f"{r['MTBF_relay_anni']:.0f} anni")
+
+    elif tool_mv == "Calcolo — RTD Pt100/Pt1000 (IEC 60751)":
+        st.subheader("Conversione RTD ↔ temperatura — scheda PRTD (IEC 60751)")
+        st.caption("Equazione di Callendar–Van Dusen, campo nominale −200…850 °C.")
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo_rtd = st.selectbox("Tipo sensore:", ["Pt100 (R0=100 Ω)", "Pt1000 (R0=1000 Ω)"], key="mv_rtd_tipo")
+        R0_rtd = 100.0 if tipo_rtd.startswith("Pt100 ") else 1000.0
+        with col2:
+            verso_rtd = st.radio("Direzione:", ["Temperatura → Resistenza", "Resistenza → Temperatura"], key="mv_rtd_verso")
+        if verso_rtd == "Temperatura → Resistenza":
+            t_rtd = st.number_input("Temperatura [°C]:", value=100.0, min_value=-200.0, max_value=850.0, key="mv_rtd_t")
+            if st.button("Calcola Resistenza", key="mv_btn_rtd1"):
+                try:
+                    r = mv.rtd_resistenza(t_rtd, R0_rtd)
+                    st.metric("Resistenza", f"{r['R_ohm']:.3f} Ω")
+                except ValueError as e:
+                    st.error(str(e))
+        else:
+            r_rtd = st.number_input("Resistenza [Ω]:", value=138.505, min_value=1.0, key="mv_rtd_r")
+            if st.button("Calcola Temperatura", key="mv_btn_rtd2"):
+                try:
+                    r = mv.rtd_temperatura(r_rtd, R0_rtd)
+                    st.metric("Temperatura", f"{r['temp_C']:.3f} °C")
+                except ValueError as e:
+                    st.error(str(e))
+
+    elif tool_mv == "Calcolo — Termocoppia (ITS-90)":
+        st.subheader("Conversione termocoppia ↔ temperatura — scheda PTCC (ITS-90)")
+        st.caption("Funzioni di riferimento NIST ITS-90 con compensazione del giunto freddo (CJC). "
+                   "Tipi implementati: J, K, T, E.")
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo_tc = st.selectbox("Tipo termocoppia:", list(mv.TC_ITS90.keys()), key="mv_tc_tipo")
+        with col2:
+            t_cj = st.number_input("Temperatura giunto freddo [°C]:", value=0.0, key="mv_tc_cj")
+        verso_tc = st.radio("Direzione:", ["Temperatura → mV", "mV → Temperatura"], key="mv_tc_verso", horizontal=True)
+        rng_c = mv.TC_ITS90[tipo_tc]["range_C"]
+        if verso_tc == "Temperatura → mV":
+            t_tc = st.number_input(f"Temperatura giunto caldo [°C] (campo {rng_c[0]:.0f}…{rng_c[1]:.0f}):",
+                                   value=500.0, key="mv_tc_t")
+            if st.button("Calcola f.e.m.", key="mv_btn_tc1"):
+                try:
+                    r = mv.termocoppia_mv(tipo_tc, t_tc, t_cj)
+                    c1, c2 = st.columns(2)
+                    c1.metric("F.e.m. (con CJC)", f"{r['mV']:.4f} mV")
+                    c2.metric("F.e.m. rif. 0 °C", f"{r['mV_assoluto_rif0']:.4f} mV")
+                except ValueError as e:
+                    st.error(str(e))
+        else:
+            mv_tc = st.number_input("F.e.m. misurata [mV]:", value=20.644, key="mv_tc_mv")
+            if st.button("Calcola Temperatura", key="mv_btn_tc2"):
+                try:
+                    r = mv.termocoppia_temp(tipo_tc, mv_tc, t_cj)
+                    st.metric("Temperatura giunto caldo", f"{r['temp_C']:.2f} °C")
+                except ValueError as e:
+                    st.error(str(e))
+
+    elif tool_mv == "Calcolo — Diagnostica Loop 4–20 mA (NE43)":
+        st.subheader("Diagnostica loop analogico 4–20 mA (NAMUR NE43)")
+        st.caption("Soglie standard: ≤3.6 mA sotto-range/rottura, ≥21 mA sovra-range/corto. "
+                   "Applicabile ai canali PAIC/PHRA.")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            i_loop = st.number_input("Corrente misurata [mA]:", value=12.0, min_value=0.0, max_value=25.0, step=0.1, key="mv_ne43_i")
+        with col2:
+            sp_min = st.number_input("Valore a 4 mA:", value=0.0, key="mv_ne43_min")
+        with col3:
+            sp_max = st.number_input("Valore a 20 mA:", value=100.0, key="mv_ne43_max")
+        if st.button("Diagnostica Loop", key="mv_btn_ne43"):
+            try:
+                r = mv.diagnostica_loop_420(i_loop, sp_min, sp_max)
+                if r["valido"]:
+                    st.success(r["stato"])
+                    c1, c2 = st.columns(2)
+                    c1.metric("Valore di processo", f"{r['valore_processo']:.2f}")
+                    c2.metric("Percentuale scala", f"{r['percentuale']:.1f} %")
+                else:
+                    st.error(r["stato"])
+            except ValueError as e:
+                st.error(str(e))
+
+    else:  # Velocità / Sovravelocità Turbina
+        st.subheader("Velocità e sovravelocità turbina — schede PTUR/PPRO/PGEN")
+        st.caption("Ruota fonica + pickup magnetico (MPU). Campo sensore 2 Hz – 20 kHz (GEH-6721G).")
+        col1, col2 = st.columns(2)
+        with col1:
+            n_denti = st.number_input("Numero denti ruota fonica:", value=60, min_value=1, step=1, key="mv_spd_denti")
+        with col2:
+            modo_spd = st.radio("Modalità:", ["rpm → frequenza", "frequenza → rpm", "Trip sovravelocità"], key="mv_spd_modo")
+        if modo_spd == "rpm → frequenza":
+            rpm_in = st.number_input("Velocità [rpm]:", value=3000.0, min_value=0.0, key="mv_spd_rpm")
+            if st.button("Calcola Frequenza", key="mv_btn_spd1"):
+                r = mv.frequenza_da_velocita(rpm_in, int(n_denti))
+                st.metric("Frequenza impulsi", f"{r['freq_hz']:.1f} Hz")
+                if not r["in_campo_sensore"]:
+                    st.warning("Frequenza fuori dal campo 2 Hz – 20 kHz del sensore.")
+        elif modo_spd == "frequenza → rpm":
+            f_in = st.number_input("Frequenza impulsi [Hz]:", value=3000.0, min_value=0.0, key="mv_spd_freq")
+            if st.button("Calcola Velocità", key="mv_btn_spd2"):
+                r = mv.velocita_da_frequenza(f_in, int(n_denti))
+                st.metric("Velocità", f"{r['rpm']:.1f} rpm")
+                if not r["in_campo_sensore"]:
+                    st.warning("Frequenza fuori dal campo 2 Hz – 20 kHz del sensore.")
+        else:
+            col3, col4 = st.columns(2)
+            with col3:
+                rpm_nom = st.number_input("Velocità nominale [rpm]:", value=3000.0, min_value=1.0, key="mv_spd_nom")
+            with col4:
+                soglia = st.number_input("Soglia trip [% nominale]:", value=110.0, min_value=100.1, key="mv_spd_soglia")
+            if st.button("Calcola Trip", key="mv_btn_spd3"):
+                try:
+                    r = mv.trip_sovravelocita(rpm_nom, int(n_denti), soglia)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Velocità trip", f"{r['rpm_trip']:.0f} rpm")
+                    c2.metric("Frequenza trip", f"{r['freq_trip_hz']:.1f} Hz")
+                    c3.metric("Margine", f"+{r['margine_rpm']:.0f} rpm")
+                    if not r["freq_trip_in_campo_sensore"]:
+                        st.warning("Frequenza di trip fuori dal campo 2 Hz – 20 kHz del sensore.")
+                except ValueError as e:
+                    st.error(str(e))
 
 
 st.markdown("---")
