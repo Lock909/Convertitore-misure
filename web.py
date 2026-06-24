@@ -139,7 +139,15 @@ h3 { font-size: 1.05rem !important; color: #555; }
 @media (max-width: 640px) {
     [data-testid="block-container"] { padding-top: 0.8rem; padding-left: 0.8rem; padding-right: 0.8rem; }
     h1 { font-size: 1.3rem !important; }
-    [data-testid="stSidebar"] { min-width: 80vw !important; }
+
+    /* Sidebar overlay a piena larghezza: la versione nativa di Streamlit è
+       larga ~300px fissi, su schermi piu' strui lascia una fetta di body
+       visibile e cliccabile dietro al menu aperto. Forziamo qui 100vw sia
+       sulla larghezza che sulla traslazione (in % invece che px) cosi'
+       l'apertura/chiusura resta coerente con qualunque larghezza schermo. */
+    [data-testid="stSidebar"] { width: 100vw !important; min-width: 100vw !important; }
+    [data-testid="stSidebar"][aria-expanded="false"] { transform: translateX(-100%) !important; }
+    [data-testid="stSidebar"][aria-expanded="true"]  { transform: translateX(0) !important; }
 
     /* Selectbox lunghi: popover più basso per lasciare spazio alla tastiera
        virtuale, opzioni piu' alte per un tocco preciso col dito. */
