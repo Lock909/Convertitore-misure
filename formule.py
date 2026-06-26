@@ -209,7 +209,9 @@ def calcola_rifasamento_kvar(p_attiva_kw, cos_ini, cos_fin):
 def calcola_caduta_avanzata(
     materiale, isolante, posa,
     fasi, amp, metri, sez,
-    cos_phi, temp_amb, iz_nominale, num_circuiti
+    cos_phi, temp_amb, iz_nominale, num_circuiti,
+    r20_km_override=None, x_km_override=None, n_parallelo=1,
+    considera_reattanza=True,
 ):
     """
     Calcola la caduta di tensione con correzione termica e di raggruppamento.
@@ -225,13 +227,34 @@ def calcola_caduta_avanzata(
     sez          : float — sezione del conduttore [mm²]
     cos_phi      : float — fattore di potenza
     temp_amb     : float — temperatura ambiente [°C]
-    iz_nominale  : float — portata nominale da catalogo a 30°C [A]
+    iz_nominale  : float — portata nominale da catalogo a 30°C [A] (per conduttore)
     num_circuiti : int   — numero di circuiti affiancati (per K2)
+    r20_km_override : float | None — resistenza cavo a 20°C da datasheet [Ω/km].
+                       Se fornita, sostituisce la resistività teorica (rho_20/sez)
+                       come base per la correzione termica.
+    x_km_override   : float | None — reattanza induttiva del cavo da datasheet
+                       [Ω/km]. Se fornita, sostituisce la reattanza teorica fissa
+                       (REATTANZA_INDUTTIVA_KM).
+    n_parallelo     : int — numero di conduttori in parallelo per fase (≥ 1).
+                       L'impedenza equivalente e la portata vengono divise/
+                       moltiplicate di conseguenza.
+    considera_reattanza : bool — se False, la reattanza X viene posta a 0 nel
+                       calcolo (caduta a sola componente resistiva). Utile per
+                       sezioni piccole (≤16-25 mm²) dove il contributo di X è
+                       trascurabile; per sezioni grandi (≥95 mm²) è invece
+                       significativo e si raccomanda di lasciarla attiva
+                       (default True).
 
     Ritorna (tupla)
     ---------------
     dv, temp_lavoro, rho_t, k1, k2, iz_corretta
     """
+    if r20_km_override is not None and r20_km_override <= 0:
+        raise ValueError("La resistenza da datasheet deve essere maggiore di zero.")
+    if x_km_override is not None and x_km_override < 0:
+        raise ValueError("La reattanza da datasheet non può essere negativa.")
+    if n_parallelo < 1:
+        raise ValueError("Il numero di conduttori in parallelo deve essere almeno 1.")
 
     # 1. Resistività base a 20°C
     if materiale not in ("Rame", "Alluminio"):
@@ -287,8 +310,8 @@ def calcola_caduta_avanzata(
     elif num_circuiti in (7, 8, 9):  k2 = 0.50
     else:                            k2 = 0.40  # 10 o più circuiti
 
-    # 5. Portata reale dopo i declassamenti
-    iz_corretta    = iz_nominale * k1 * k2
+    # 5. Portata reale dopo i declassamenti (per fase, conduttori in parallelo inclusi)
+    iz_corretta    = iz_nominale * k1 * k2 * n_parallelo
     tasso_utilizzo = amp / iz_corretta if iz_corretta > 0 else 1.0
 
     # 6. Temperatura interna stimata del cavo
@@ -299,9 +322,15 @@ def calcola_caduta_avanzata(
     rho_t = rho_20 * (1.0 + ALPHA_METALLI * (temp_lavoro - 20.0))
 
     # 8. Calcolo vettoriale della caduta di tensione
-    r_km    = (rho_t / sez) * 1000.0
+    if r20_km_override is not None:
+        # R da datasheet (riferita a 20°C): applica la stessa correzione termica
+        r_km = r20_km_override * (1.0 + ALPHA_METALLI * (temp_lavoro - 20.0))
+    else:
+        r_km = (rho_t / sez) * 1000.0
+    x_km    = (x_km_override if x_km_override is not None else REATTANZA_INDUTTIVA_KM) if considera_reattanza else 0.0
     sin_phi = math.sqrt(max(0.0, 1.0 - cos_phi**2))
-    z_km    = (r_km * cos_phi) + (REATTANZA_INDUTTIVA_KM * sin_phi)
+    # Conduttori in parallelo per fase: l'impedenza equivalente si riduce di n_parallelo
+    z_km    = ((r_km * cos_phi) + (x_km * sin_phi)) / n_parallelo
     k_fasi  = 2.0 if fasi == "Monofase" else math.sqrt(3)
     dv      = k_fasi * amp * (metri / 1000.0) * z_km
 

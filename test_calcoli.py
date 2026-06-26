@@ -44,6 +44,12 @@ import saldature as sald
 import condotte_hvac as hvac
 import performance_level as pl_iso
 import mark_vie as mv
+import portata_cavo as pcav
+import grado_protezione_ip as gip
+import costi_energetici as ce
+import libreria_cavi as libcavi
+import canaline_passerelle as canp
+import riferimento_rapido as rifr
 
 
 class TestAutomazione(unittest.TestCase):
@@ -98,6 +104,70 @@ class TestFormule(unittest.TestCase):
     def test_sezione_protezione_invalid_densita_raises(self):
         with self.assertRaises(ValueError):
             formule.calcola_sezione_protezione(16.0, 0.0)
+
+    def test_caduta_con_r_x_datasheet(self):
+        dv, t_lav, rho_t, k1, k2, iz_real = formule.calcola_caduta_avanzata(
+            "Rame", "PVC (70°C)", "Metodo C", "Trifase",
+            16.0, 50.0, 4.0, 0.85, 30.0, 32.0, 1,
+            r20_km_override=4.61, x_km_override=0.08,
+        )
+        self.assertGreater(dv, 0.0)
+
+    def test_caduta_datasheet_diversa_da_teorica(self):
+        comuni = ("Rame", "PVC (70°C)", "Metodo C", "Trifase", 16.0, 50.0, 4.0, 0.85, 30.0, 32.0, 1)
+        dv_teorica = formule.calcola_caduta_avanzata(*comuni)[0]
+        dv_datasheet = formule.calcola_caduta_avanzata(*comuni, r20_km_override=10.0, x_km_override=0.5)[0]
+        self.assertNotAlmostEqual(dv_teorica, dv_datasheet)
+
+    def test_caduta_r_datasheet_non_valida_raises(self):
+        with self.assertRaises(ValueError):
+            formule.calcola_caduta_avanzata(
+                "Rame", "PVC (70°C)", "Metodo C", "Trifase",
+                16.0, 50.0, 4.0, 0.85, 30.0, 32.0, 1,
+                r20_km_override=0.0,
+            )
+
+    def test_caduta_x_datasheet_negativa_raises(self):
+        with self.assertRaises(ValueError):
+            formule.calcola_caduta_avanzata(
+                "Rame", "PVC (70°C)", "Metodo C", "Trifase",
+                16.0, 50.0, 4.0, 0.85, 30.0, 32.0, 1,
+                x_km_override=-0.1,
+            )
+
+    def test_caduta_conduttori_in_parallelo_riduce_perdita(self):
+        # Con corrente bassa (utilizzo trascurabile) la temperatura di lavoro
+        # resta ~costante, quindi la caduta si riduce quasi esattamente a metà.
+        comuni = ("Rame", "PVC (70°C)", "Metodo C", "Trifase", 1.0, 50.0, 4.0, 0.85, 30.0, 32.0, 1)
+        dv_singolo = formule.calcola_caduta_avanzata(*comuni, n_parallelo=1)[0]
+        dv_doppio = formule.calcola_caduta_avanzata(*comuni, n_parallelo=2)[0]
+        self.assertAlmostEqual(dv_doppio, dv_singolo / 2.0, places=3)
+
+    def test_caduta_parallelo_aumenta_portata_totale(self):
+        comuni = ("Rame", "PVC (70°C)", "Metodo C", "Trifase", 32.0, 50.0, 4.0, 0.85, 30.0, 32.0, 1)
+        iz_singolo = formule.calcola_caduta_avanzata(*comuni, n_parallelo=1)[5]
+        iz_doppio = formule.calcola_caduta_avanzata(*comuni, n_parallelo=2)[5]
+        self.assertAlmostEqual(iz_doppio, iz_singolo * 2.0)
+
+    def test_caduta_n_parallelo_non_valido_raises(self):
+        with self.assertRaises(ValueError):
+            formule.calcola_caduta_avanzata(
+                "Rame", "PVC (70°C)", "Metodo C", "Trifase",
+                16.0, 50.0, 4.0, 0.85, 30.0, 32.0, 1,
+                n_parallelo=0,
+            )
+
+    def test_caduta_considera_reattanza_false_riduce_caduta(self):
+        comuni = ("Rame", "PVC (70°C)", "Metodo C", "Trifase", 16.0, 50.0, 4.0, 0.85, 30.0, 32.0, 1)
+        dv_con_x = formule.calcola_caduta_avanzata(*comuni, considera_reattanza=True)[0]
+        dv_senza_x = formule.calcola_caduta_avanzata(*comuni, considera_reattanza=False)[0]
+        self.assertLess(dv_senza_x, dv_con_x)
+
+    def test_caduta_considera_reattanza_false_equivale_x_zero(self):
+        comuni = ("Rame", "PVC (70°C)", "Metodo C", "Trifase", 16.0, 50.0, 4.0, 0.85, 30.0, 32.0, 1)
+        dv_senza_x = formule.calcola_caduta_avanzata(*comuni, considera_reattanza=False)[0]
+        dv_x_zero = formule.calcola_caduta_avanzata(*comuni, x_km_override=0.0, considera_reattanza=True)[0]
+        self.assertAlmostEqual(dv_senza_x, dv_x_zero)
 
     def test_potenza_e_corrente_dc(self):
         res = formule.calcola_potenza_e_corrente(
@@ -1598,6 +1668,249 @@ class TestMarkVIe(unittest.TestCase):
         self.assertEqual(len(mv.cerca_troubleshooting("")), len(mv.TROUBLESHOOTING))
         self.assertTrue(all("opc" in f"{v['sintomo']} {v['componente']} {v['dove']}".lower()
                             for v in mv.cerca_troubleshooting("OPC")))
+
+
+class TestPortataCavo(unittest.TestCase):
+    def test_sezione_minima_base(self):
+        # Ib=30 A, PVC posa C, 30°C, 1 circuito → 4 mm² (Iz0=32 ≥ 30)
+        r = pcav.sezione_minima_portata(30, "PVC", "C", 30, 1)
+        self.assertEqual(r["sezione_mm2"], 4)
+        self.assertGreaterEqual(r["Iz_A"], 30)
+        self.assertAlmostEqual(r["K1"], 1.0)
+        self.assertAlmostEqual(r["K2"], 1.0)
+
+    def test_declassamento_aumenta_sezione(self):
+        # Stesso Ib ma 50°C e 3 circuiti → sezione necessariamente maggiore
+        base = pcav.sezione_minima_portata(30, "PVC", "C", 30, 1)
+        declas = pcav.sezione_minima_portata(30, "PVC", "C", 50, 3)
+        self.assertGreater(declas["sezione_mm2"], base["sezione_mm2"])
+        self.assertLess(declas["K1"], 1.0)
+        self.assertLess(declas["K2"], 1.0)
+
+    def test_epr_piu_capace_di_pvc(self):
+        pvc = pcav.sezione_minima_portata(95, "PVC", "C", 30, 1)
+        epr = pcav.sezione_minima_portata(95, "EPR", "C", 30, 1)
+        self.assertLessEqual(epr["sezione_mm2"], pvc["sezione_mm2"])
+
+    def test_utilizzo_sempre_sotto_100(self):
+        # La sezione scelta deve sempre garantire Iz ≥ Ib (utilizzo ≤ 100%)
+        for ib in (5, 16, 32, 63, 100):
+            r = pcav.sezione_minima_portata(ib, "EPR", "E", 30, 1)
+            self.assertLessEqual(r["tasso_utilizzo_pct"], 100.0)
+
+    def test_ib_non_valido(self):
+        with self.assertRaises(ValueError):
+            pcav.sezione_minima_portata(0, "PVC", "C", 30, 1)
+
+    def test_corrente_eccessiva_solleva_errore(self):
+        with self.assertRaises(ValueError):
+            pcav.sezione_minima_portata(5000, "PVC", "B2", 30, 1)
+
+    def test_portata_corretta_coerente(self):
+        v = pcav.portata_corretta(16, "EPR", "C", 30, 1)
+        self.assertEqual(v["Iz0_A"], pcav.IZ0_CEI_UNEL[("EPR", "C")][16])
+        self.assertAlmostEqual(v["Iz_A"], v["Iz0_A"])  # K1=K2=1 a 30°C, 1 circuito
+
+    def test_tabelle_complete(self):
+        # Ogni combinazione isolante/posa copre tutte le sezioni commerciali
+        sez_attese = {1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120}
+        for chiave, tab in pcav.IZ0_CEI_UNEL.items():
+            self.assertEqual(set(tab.keys()), sez_attese, chiave)
+
+    def test_cavo_personalizzato_idoneo(self):
+        r = pcav.verifica_cavo_personalizzato(25, 30, "PVC", 30, 1)
+        self.assertTrue(r["idoneo"])
+        self.assertAlmostEqual(r["Iz_A"], 30.0)
+        self.assertAlmostEqual(r["tasso_utilizzo_pct"], 25 / 30 * 100.0)
+
+    def test_cavo_personalizzato_non_idoneo(self):
+        r = pcav.verifica_cavo_personalizzato(40, 30, "PVC", 30, 1)
+        self.assertFalse(r["idoneo"])
+        self.assertLess(r["Iz_A"], r["Ib_A"])
+
+    def test_cavo_personalizzato_declassamento(self):
+        r = pcav.verifica_cavo_personalizzato(20, 30, "PVC", 50, 3)
+        self.assertAlmostEqual(r["K1"], 0.71)
+        self.assertAlmostEqual(r["K2"], 0.70)
+        self.assertAlmostEqual(r["Iz_A"], 30 * 0.71 * 0.70)
+
+    def test_cavo_personalizzato_input_non_valido(self):
+        with self.assertRaises(ValueError):
+            pcav.verifica_cavo_personalizzato(0, 30, "PVC")
+        with self.assertRaises(ValueError):
+            pcav.verifica_cavo_personalizzato(20, 0, "PVC")
+
+    def test_sezione_minima_con_parallelo(self):
+        r1 = pcav.sezione_minima_portata(60, "PVC", "C", 30, 1, n_parallelo=1)
+        r2 = pcav.sezione_minima_portata(60, "PVC", "C", 30, 1, n_parallelo=2)
+        # con 2 conduttori in parallelo basta una sezione minore o uguale
+        self.assertLessEqual(r2["sezione_mm2"], r1["sezione_mm2"])
+        self.assertAlmostEqual(r2["Iz_A"], r2["Iz0_A"] * r2["K1"] * r2["K2"] * 2)
+
+    def test_cavo_personalizzato_con_parallelo(self):
+        r = pcav.verifica_cavo_personalizzato(50, 30, "PVC", 30, 1, n_parallelo=2)
+        self.assertAlmostEqual(r["Iz_A"], 60.0)
+        self.assertTrue(r["idoneo"])
+
+    def test_n_parallelo_non_valido_raises(self):
+        with self.assertRaises(ValueError):
+            pcav.sezione_minima_portata(20, "PVC", "C", 30, 1, n_parallelo=0)
+        with self.assertRaises(ValueError):
+            pcav.verifica_cavo_personalizzato(20, 30, "PVC", 30, 1, n_parallelo=0)
+
+    def test_lista_sezioni_disponibili(self):
+        self.assertEqual(pcav.lista_sezioni_disponibili(),
+                         sorted(pcav.IZ0_CEI_UNEL[("PVC", "B1")].keys()))
+
+
+class TestGradoProtezioneIP(unittest.TestCase):
+    def test_ip65(self):
+        r = gip.decodifica_ip("IP65")
+        self.assertEqual(r["prima_cifra"], "6")
+        self.assertEqual(r["seconda_cifra"], "5")
+        self.assertIn("polvere", r["prima_titolo"].lower())
+        self.assertEqual(r["lettere"], [])
+
+    def test_x_non_specificata(self):
+        r = gip.decodifica_ip("IP2X")
+        self.assertEqual(r["seconda_titolo"], "Non specificata")
+        r2 = gip.decodifica_ip("IPX7")
+        self.assertEqual(r2["prima_titolo"], "Non specificata")
+        self.assertEqual(r2["seconda_cifra"], "7")
+
+    def test_lettere_addizionali_e_supplementari(self):
+        r = gip.decodifica_ip("IP54CW")
+        tipi = {L[0]: L[1] for L in r["lettere"]}
+        self.assertEqual(tipi["C"], "addizionale")
+        self.assertEqual(tipi["W"], "supplementare")
+
+    def test_case_insensitive_e_spazi(self):
+        self.assertEqual(gip.decodifica_ip("ip 6 8")["codice"], "IP68")
+
+    def test_codici_non_validi(self):
+        for bad in ["65", "IP9", "IP6Z", "IP65Q"]:
+            with self.assertRaises(ValueError, msg=bad):
+                gip.decodifica_ip(bad)
+
+    def test_ik_energie_monotone(self):
+        valori = list(gip.IK_ENERGIA_JOULE.values())
+        self.assertEqual(valori, sorted(valori))
+        self.assertEqual(gip.IK_ENERGIA_JOULE["IK10"], 20.0)
+
+
+class TestCostiEnergetici(unittest.TestCase):
+    def test_costo_annuo(self):
+        r = ce.costo_annuo(10, 2000, 0.25)
+        self.assertEqual(r["energia_kWh_anno"], 20000)
+        self.assertEqual(r["costo_eur_anno"], 5000)
+
+    def test_confronto_risparmio(self):
+        r = ce.confronto_efficientamento(12, 10, 4000, 0.20, 800)
+        self.assertEqual(r["risparmio_kWh_anno"], 8000)
+        self.assertAlmostEqual(r["risparmio_eur_anno"], 1600)
+        self.assertAlmostEqual(r["payback_anni"], 0.5)
+        self.assertTrue(r["conveniente"])
+
+    def test_nessun_risparmio_payback_infinito(self):
+        r = ce.confronto_efficientamento(10, 12, 5000, 0.2, 500)
+        self.assertEqual(r["payback_anni"], float("inf"))
+        self.assertFalse(r["conveniente"])
+
+    def test_extra_zero_payback_zero(self):
+        r = ce.confronto_efficientamento(12, 10, 4000, 0.2, 0)
+        self.assertEqual(r["payback_anni"], 0.0)
+
+    def test_potenza_motore(self):
+        self.assertAlmostEqual(ce.potenza_assorbita_motore(22, 90), 22 / 0.9)
+
+    def test_motore_ie_piu_efficiente_risparmia(self):
+        r = ce.confronto_motore_ie(22, 89.8, 93.0, 6000, 0.22, 600)
+        self.assertGreater(r["P_assorbita_prima_kW"], r["P_assorbita_dopo_kW"])
+        self.assertGreater(r["risparmio_eur_anno"], 0)
+        self.assertGreater(r["risparmio_co2_kg_anno"], 0)
+
+    def test_rendimento_non_valido(self):
+        with self.assertRaises(ValueError):
+            ce.potenza_assorbita_motore(10, 0)
+        with self.assertRaises(ValueError):
+            ce.potenza_assorbita_motore(10, 120)
+
+
+class TestLibreriaCavi(unittest.TestCase):
+    def test_lista_cavi_commerciali(self):
+        self.assertIn("N1VV-K / FROR (PVC, multipolare)", libcavi.lista_cavi_commerciali())
+        self.assertIn("FG16OR16 / FG7OR (EPR/HEPR, multipolare)", libcavi.lista_cavi_commerciali())
+
+    def test_parametri_cavo_pvc(self):
+        p = libcavi.parametri_cavo("N1VV-K / FROR (PVC, multipolare)", 4)
+        self.assertEqual(p["isolante"], "PVC")
+        self.assertAlmostEqual(p["R20_ohm_km"], 4.61)
+        self.assertAlmostEqual(p["X_ohm_km"], 0.08)
+
+    def test_parametri_cavo_epr(self):
+        p = libcavi.parametri_cavo("FG16OR16 / FG7OR (EPR/HEPR, multipolare)", 16)
+        self.assertEqual(p["isolante"], "EPR")
+        self.assertAlmostEqual(p["R20_ohm_km"], 1.15)
+
+    def test_cavo_non_riconosciuto_raises(self):
+        with self.assertRaises(ValueError):
+            libcavi.parametri_cavo("Cavo inesistente", 4)
+
+    def test_sezione_non_in_libreria_raises(self):
+        with self.assertRaises(ValueError):
+            libcavi.parametri_cavo("N1VV-K / FROR (PVC, multipolare)", 999)
+
+    def test_lista_sezioni_libreria_ordinata(self):
+        sez = libcavi.lista_sezioni_libreria()
+        self.assertEqual(sez, sorted(sez))
+        self.assertEqual(set(sez), set(libcavi.R20_OHM_KM_IEC60228.keys()))
+
+
+class TestCanalinePasserelle(unittest.TestCase):
+    def test_area_canalina(self):
+        self.assertAlmostEqual(canp.area_canalina_mm2(100, 50), 5000.0)
+
+    def test_area_canalina_non_valida_raises(self):
+        with self.assertRaises(ValueError):
+            canp.area_canalina_mm2(0, 50)
+
+    def test_area_cavo(self):
+        self.assertAlmostEqual(canp.area_cavo_mm2(10), math.pi / 4.0 * 100.0)
+
+    def test_verifica_riempimento_ottimale(self):
+        # area canalina 100x100=10000mm2, 4 cavi diametro 20mm -> area ~1256mm2 -> 12.6%
+        r = canp.verifica_riempimento(100, 100, [(20, 4)])
+        self.assertEqual(r["n_cavi_totale"], 4)
+        self.assertEqual(r["esito"], "ottimale")
+        self.assertLess(r["riempimento_pct"], canp.SOGLIA_OTTIMALE_PCT)
+
+    def test_verifica_riempimento_eccessivo(self):
+        r = canp.verifica_riempimento(50, 50, [(40, 4)])
+        self.assertEqual(r["esito"], "eccessivo")
+        self.assertGreater(r["riempimento_pct"], canp.SOGLIA_MASSIMA_PCT)
+
+    def test_verifica_riempimento_nessun_cavo_raises(self):
+        with self.assertRaises(ValueError):
+            canp.verifica_riempimento(100, 100, [])
+
+    def test_verifica_riempimento_quantita_non_valida_raises(self):
+        with self.assertRaises(ValueError):
+            canp.verifica_riempimento(100, 100, [(10, 0)])
+
+
+class TestRiferimentoRapido(unittest.TestCase):
+    def test_lista_colori(self):
+        colori = rifr.lista_colori()
+        self.assertIn("Giallo-Verde", colori)
+        self.assertIn("Blu chiaro", colori)
+
+    def test_sezioni_normalizzate_ordinate(self):
+        sez = rifr.SEZIONI_CAVO_NORMALIZZATE_MM2
+        self.assertEqual(sez, sorted(sez))
+
+    def test_diametro_esterno_indicativo_coerente_con_sezioni(self):
+        for sez in rifr.DIAMETRO_ESTERNO_INDICATIVO_MM:
+            self.assertIn(sez, rifr.SEZIONI_CAVO_NORMALIZZATE_MM2)
 
 
 if __name__ == "__main__":

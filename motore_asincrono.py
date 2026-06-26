@@ -203,6 +203,11 @@ def classe_ie_eta(P_kw: float, classe: str) -> float:
     return _IE_ETA[chiave][idx[classe]]
 
 
+def tabella_ie_eta() -> dict:
+    """Tabella completa potenza [kW] -> (IE1, IE2, IE3, IE4) rendimento [%]."""
+    return dict(_IE_ETA)
+
+
 def confronto_classi_ie(P_kw: float, ore_anno: float = 8000.0, costo_kwh: float = 0.15) -> dict:
     """
     Confronta il costo energetico annuo tra classi IE1/IE2/IE3/IE4.
