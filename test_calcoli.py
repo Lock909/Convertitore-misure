@@ -50,6 +50,9 @@ import costi_energetici as ce
 import libreria_cavi as libcavi
 import canaline_passerelle as canp
 import riferimento_rapido as rifr
+import batch_cavi
+import batterie_litio as blit
+import componenti_passivi as cpas
 
 
 class TestAutomazione(unittest.TestCase):
@@ -1669,6 +1672,59 @@ class TestMarkVIe(unittest.TestCase):
         self.assertTrue(all("opc" in f"{v['sintomo']} {v['componente']} {v['dove']}".lower()
                             for v in mv.cerca_troubleshooting("OPC")))
 
+    # --- Checklist commissioning ---
+    def test_checklist_commissioning_struttura(self):
+        self.assertGreaterEqual(len(mv.CHECKLIST_COMMISSIONING), 5)
+        for blocco in mv.CHECKLIST_COMMISSIONING:
+            self.assertIn("fase", blocco)
+            self.assertIn("voci", blocco)
+            self.assertTrue(blocco["voci"])
+
+    def test_checklist_commissioning_flat_id_univoci(self):
+        flat = mv.checklist_commissioning_flat()
+        ids = [v["id"] for v in flat]
+        self.assertEqual(len(ids), len(set(ids)))
+        n_voci_tot = sum(len(b["voci"]) for b in mv.CHECKLIST_COMMISSIONING)
+        self.assertEqual(len(flat), n_voci_tot)
+        for v in flat:
+            self.assertIn("fase", v)
+            self.assertIn("voce", v)
+
+    # --- Loading IONet ---
+    def test_loading_ionet_base(self):
+        r = mv.loading_ionet(8, canali_medi_per_pacco=16.0, frame_rate_hz=100.0, banda_rete_mbps=100.0)
+        self.assertGreater(r["utilizzo_pct"], 0.0)
+        self.assertLess(r["utilizzo_pct"], 100.0)
+        self.assertEqual(r["n_pacchi_io"], 8)
+
+    def test_loading_ionet_cresce_con_pacchi(self):
+        r1 = mv.loading_ionet(4)
+        r2 = mv.loading_ionet(8)
+        self.assertGreater(r2["utilizzo_pct"], r1["utilizzo_pct"])
+        self.assertAlmostEqual(r2["utilizzo_pct"], r1["utilizzo_pct"] * 2.0, places=4)
+
+    def test_loading_ionet_margine_raccomandato(self):
+        r_basso = mv.loading_ionet(2, canali_medi_per_pacco=16.0)
+        self.assertTrue(r_basso["entro_margine_raccomandato"])
+        r_alto = mv.loading_ionet(500, canali_medi_per_pacco=16.0)
+        self.assertFalse(r_alto["entro_margine_raccomandato"])
+        self.assertGreater(r_alto["utilizzo_pct"], r_alto["margine_raccomandato_pct"])
+
+    def test_loading_ionet_n_pacchi_max_raccomandato_coerente(self):
+        r = mv.loading_ionet(4, canali_medi_per_pacco=16.0)
+        r_al_limite = mv.loading_ionet(r["n_pacchi_max_raccomandato"], canali_medi_per_pacco=16.0)
+        self.assertLessEqual(r_al_limite["utilizzo_pct"], r["margine_raccomandato_pct"])
+
+    def test_loading_ionet_validazioni(self):
+        with self.assertRaises(ValueError):
+            mv.loading_ionet(0)
+        with self.assertRaises(ValueError):
+            mv.loading_ionet(4, canali_medi_per_pacco=0)
+        with self.assertRaises(ValueError):
+            mv.loading_ionet(4, frame_rate_hz=0)
+        with self.assertRaises(ValueError):
+            mv.loading_ionet(4, banda_rete_mbps=0)
+
 
 class TestPortataCavo(unittest.TestCase):
     def test_sezione_minima_base(self):
@@ -1911,6 +1967,400 @@ class TestRiferimentoRapido(unittest.TestCase):
     def test_diametro_esterno_indicativo_coerente_con_sezioni(self):
         for sez in rifr.DIAMETRO_ESTERNO_INDICATIVO_MM:
             self.assertIn(sez, rifr.SEZIONI_CAVO_NORMALIZZATE_MM2)
+
+
+class TestBatchCavi(unittest.TestCase):
+    def _linea(self, **kw):
+        base = {
+            "nome": "L1", "fasi": "Trifase", "Ib_A": 16.0, "lunghezza_m": 30.0,
+            "cos_phi": 0.9, "isolante": "PVC", "posa": "C", "T_amb": 30.0,
+            "n_circuiti": 1, "n_parallelo": 1,
+        }
+        base.update(kw)
+        return base
+
+    def test_dimensiona_linea_ok(self):
+        r = batch_cavi.dimensiona_linea(self._linea(Ib_A=16.0, lunghezza_m=10.0))
+        self.assertIsNotNone(r["sezione_mm2"])
+        self.assertGreaterEqual(r["Iz_A"], 16.0)
+        self.assertEqual(r["esito"], "OK")
+
+    def test_dimensiona_linea_caduta_fuori_norma(self):
+        # linea lunga con Ib alta -> caduta sopra 4%
+        r = batch_cavi.dimensiona_linea(self._linea(Ib_A=20.0, lunghezza_m=200.0))
+        self.assertEqual(r["esito"], "Caduta fuori norma (>4%)")
+        self.assertGreater(r["caduta_pct"], 4.0)
+
+    def test_norm_fasi(self):
+        self.assertEqual(batch_cavi._norm_fasi("mono"), "Monofase")
+        self.assertEqual(batch_cavi._norm_fasi("3"), "Trifase")
+        with self.assertRaises(ValueError):
+            batch_cavi._norm_fasi("xyz")
+
+    def test_norm_isolante(self):
+        self.assertEqual(batch_cavi._norm_isolante("PVC (70°C)"), "PVC")
+        self.assertEqual(batch_cavi._norm_isolante("XLPE"), "EPR")
+
+    def test_dimensiona_batch_continua_su_errore(self):
+        linee = [
+            self._linea(nome="buona"),
+            self._linea(nome="cattiva", fasi="boh"),
+        ]
+        res = batch_cavi.dimensiona_batch(linee)
+        self.assertEqual(len(res), 2)
+        self.assertEqual(res[0]["esito"], "OK")
+        self.assertTrue(res[1]["esito"].startswith("ERRORE"))
+
+
+class TestBatterieLitio(unittest.TestCase):
+    def test_ocv_estremi(self):
+        self.assertAlmostEqual(blit.ocv_per_soc(100), 4.20)
+        self.assertAlmostEqual(blit.ocv_per_soc(0), 3.00)
+        self.assertAlmostEqual(blit.ocv_per_soc(150), 4.20)
+        self.assertAlmostEqual(blit.ocv_per_soc(-10), 3.00)
+
+    def test_ocv_monotona_decrescente(self):
+        valori = [blit.ocv_per_soc(s) for s in range(0, 101, 5)]
+        self.assertEqual(valori, sorted(valori))
+
+    def test_capacita_effettiva_si_riduce_con_c_rate(self):
+        c_basso = blit.capacita_effettiva_ah(10.0, 0.2)
+        c_alto = blit.capacita_effettiva_ah(10.0, 2.0)
+        self.assertGreater(c_basso, c_alto)
+
+    def test_capacita_effettiva_invalida(self):
+        with self.assertRaises(ValueError):
+            blit.capacita_effettiva_ah(0, 1.0)
+        with self.assertRaises(ValueError):
+            blit.capacita_effettiva_ah(10.0, 0)
+
+    def test_curva_scarica_struttura(self):
+        r = blit.curva_scarica(10.0, c_rate=1.0, n_celle_serie=4, n_celle_parallelo=2, n_punti=20)
+        self.assertEqual(len(r["soc_pct"]), 20)
+        self.assertEqual(len(r["tensione_pacco_V"]), 20)
+        self.assertGreater(r["tensione_iniziale_V"], r["tensione_finale_V"])
+        self.assertGreater(r["t_autonomia_h"], 0)
+
+    def test_curva_scarica_c_rate_alto_riduce_autonomia_e_tensione(self):
+        basso = blit.curva_scarica(10.0, c_rate=0.2, n_celle_serie=4)
+        alto = blit.curva_scarica(10.0, c_rate=2.0, n_celle_serie=4)
+        self.assertGreater(basso["t_autonomia_h"], alto["t_autonomia_h"])
+        self.assertGreater(basso["tensione_finale_V"], alto["tensione_finale_V"])
+
+    def test_curva_scarica_validazioni(self):
+        with self.assertRaises(ValueError):
+            blit.curva_scarica(10.0, n_celle_serie=0)
+        with self.assertRaises(ValueError):
+            blit.curva_scarica(10.0, soc_finale_pct=100)
+        with self.assertRaises(ValueError):
+            blit.curva_scarica(10.0, R_int_cella_ohm=-1)
+        with self.assertRaises(ValueError):
+            blit.curva_scarica(10.0, n_punti=1)
+
+    def test_confronto_c_rate(self):
+        c = blit.confronto_c_rate(10.0, [0.2, 1.0, 2.0], n_celle_serie=4)
+        self.assertEqual(set(c.keys()), {0.2, 1.0, 2.0})
+        self.assertGreater(c[0.2]["t_autonomia_h"], c[2.0]["t_autonomia_h"])
+
+    def test_confronto_c_rate_lista_vuota(self):
+        with self.assertRaises(ValueError):
+            blit.confronto_c_rate(10.0, [])
+
+
+class TestComponentiPassivi(unittest.TestCase):
+    def test_decodifica_colori_4_bande(self):
+        r = cpas.decodifica_colori_resistore(["Marrone", "Nero", "Rosso", "Oro"])
+        self.assertEqual(r["valore_ohm"], 1000)
+        self.assertEqual(r["tolleranza_pct"], 5.0)
+        self.assertAlmostEqual(r["valore_min_ohm"], 950.0)
+        self.assertAlmostEqual(r["valore_max_ohm"], 1050.0)
+
+    def test_decodifica_colori_5_bande(self):
+        r = cpas.decodifica_colori_resistore(["Marrone", "Rosso", "Arancione", "Arancione", "Marrone"])
+        self.assertEqual(r["valore_ohm"], 123000)
+        self.assertEqual(r["tolleranza_pct"], 1.0)
+
+    def test_decodifica_colori_3_bande_tolleranza_implicita(self):
+        r = cpas.decodifica_colori_resistore(["Marrone", "Nero", "Rosso"])
+        self.assertEqual(r["valore_ohm"], 1000)
+        self.assertEqual(r["tolleranza_pct"], 20.0)
+        self.assertNotIn("coeff_temperatura_ppm_C", r)
+
+    def test_decodifica_colori_6_bande_con_coeff_temperatura(self):
+        r = cpas.decodifica_colori_resistore(["Marrone", "Nero", "Nero", "Rosso", "Oro", "Marrone"])
+        self.assertEqual(r["valore_ohm"], 10000)
+        self.assertEqual(r["tolleranza_pct"], 5.0)
+        self.assertEqual(r["coeff_temperatura_ppm_C"], 100)
+
+    def test_decodifica_colori_numero_bande_non_valido(self):
+        with self.assertRaises(ValueError):
+            cpas.decodifica_colori_resistore(["Marrone", "Nero"])
+        with self.assertRaises(ValueError):
+            cpas.decodifica_colori_resistore(["Marrone"] * 7)
+
+    def test_colori_da_resistenza_3_bande_round_trip(self):
+        r = cpas.colori_da_resistenza(1000, 3)
+        self.assertEqual(r["tolleranza_pct"], 20.0)
+        dec = cpas.decodifica_colori_resistore(r["colori"])
+        self.assertEqual(dec["valore_ohm"], 1000)
+
+    def test_colori_da_resistenza_6_bande_round_trip(self):
+        r = cpas.colori_da_resistenza(10000, 6, 5.0, 100)
+        dec = cpas.decodifica_colori_resistore(r["colori"])
+        self.assertEqual(dec["valore_ohm"], 10000)
+        self.assertEqual(dec["coeff_temperatura_ppm_C"], 100)
+
+    def test_colori_da_resistenza_6_bande_senza_coeff_temp(self):
+        with self.assertRaises(ValueError):
+            cpas.colori_da_resistenza(10000, 6, 5.0)  # coeff_temp_ppm_C mancante
+
+    def test_colori_da_resistenza_6_bande_coeff_temp_non_standard(self):
+        with self.assertRaises(ValueError):
+            cpas.colori_da_resistenza(10000, 6, 5.0, 999)
+
+    def test_decodifica_colori_invalida(self):
+        with self.assertRaises(ValueError):
+            cpas.decodifica_colori_resistore(["Marrone", "Nero", "Rosso", "Inesistente"])
+        with self.assertRaises(ValueError):
+            cpas.decodifica_colori_resistore(["Marrone", "Nero", "Rosso", "Nero"])  # Nero non valido come tolleranza
+
+    def test_colori_da_resistenza_round_trip(self):
+        for valore in (1000, 4700, 220, 56000, 1_000_000):
+            r = cpas.colori_da_resistenza(valore, 4, 5.0)
+            dec = cpas.decodifica_colori_resistore(r["colori"])
+            self.assertEqual(dec["valore_ohm"], valore)
+
+    def test_colori_da_resistenza_5_bande_round_trip(self):
+        r = cpas.colori_da_resistenza(123000, 5, 1.0)
+        dec = cpas.decodifica_colori_resistore(r["colori"])
+        self.assertEqual(dec["valore_ohm"], 123000)
+
+    def test_colori_da_resistenza_validazioni(self):
+        with self.assertRaises(ValueError):
+            cpas.colori_da_resistenza(0, 4, 5.0)
+        with self.assertRaises(ValueError):
+            cpas.colori_da_resistenza(1000, 7, 5.0)  # numero di bande non valido
+        with self.assertRaises(ValueError):
+            cpas.colori_da_resistenza(1000, 4, 3.0)  # tolleranza senza colore associato
+
+    def test_valore_normalizzato_e_esatto(self):
+        r = cpas.valore_normalizzato_e(47000, "E12")
+        self.assertAlmostEqual(r["valore_normalizzato"], 47000)
+        self.assertAlmostEqual(r["scostamento_pct"], 0.0)
+
+    def test_valore_normalizzato_e_approssima(self):
+        r = cpas.valore_normalizzato_e(53, "E24")
+        self.assertAlmostEqual(r["valore_normalizzato"], 51.0)
+
+    def test_valore_normalizzato_e_cambio_decade(self):
+        # Vicino al limite superiore della decade: deve poter salire alla decade successiva
+        r = cpas.valore_normalizzato_e(96, "E12")
+        self.assertAlmostEqual(r["valore_normalizzato"], 100.0)
+
+    def test_valore_normalizzato_e_validazioni(self):
+        with self.assertRaises(ValueError):
+            cpas.valore_normalizzato_e(0, "E12")
+        with self.assertRaises(ValueError):
+            cpas.valore_normalizzato_e(100, "E999")
+
+    def test_resistori_serie(self):
+        r = cpas.resistori_serie([100, 220, 330])
+        self.assertEqual(r["valore_equivalente"], 650)
+
+    def test_resistori_parallelo(self):
+        r = cpas.resistori_parallelo([1000, 1000])
+        self.assertAlmostEqual(r["valore_equivalente"], 500.0)
+
+    def test_resistori_parallelo_tre_valori(self):
+        r = cpas.resistori_parallelo([100, 200, 300])
+        self.assertAlmostEqual(1.0 / r["valore_equivalente"], 1/100 + 1/200 + 1/300)
+
+    def test_induttori_serie_e_parallelo(self):
+        self.assertAlmostEqual(cpas.induttori_serie([1e-3, 2e-3])["valore_equivalente"], 3e-3)
+        self.assertAlmostEqual(cpas.induttori_parallelo([1e-3, 1e-3])["valore_equivalente"], 0.5e-3)
+
+    def test_condensatori_serie_e_parallelo(self):
+        # Opposto rispetto a resistori/induttori: la serie usa la media armonica
+        self.assertAlmostEqual(cpas.condensatori_serie([10e-6, 10e-6])["valore_equivalente"], 5e-6)
+        self.assertAlmostEqual(cpas.condensatori_parallelo([10e-6, 22e-6])["valore_equivalente"], 32e-6)
+
+    def test_validazioni_liste_vuote_o_negative(self):
+        with self.assertRaises(ValueError):
+            cpas.resistori_serie([])
+        with self.assertRaises(ValueError):
+            cpas.resistori_parallelo([100, -50])
+        with self.assertRaises(ValueError):
+            cpas.condensatori_serie([0])
+
+    # ---- LED — resistenza di limitazione ----
+
+    def test_resistenza_limitazione_led(self):
+        r = cpas.resistenza_limitazione_led(9, 2, 20)
+        self.assertAlmostEqual(r["resistenza_ohm"], 350.0)
+        self.assertAlmostEqual(r["potenza_dissipata_W"], 0.14)
+        self.assertEqual(r["potenza_consigliata_W"], 0.5)
+
+    def test_resistenza_limitazione_led_validazioni(self):
+        with self.assertRaises(ValueError):
+            cpas.resistenza_limitazione_led(5, 6, 20)  # Vf >= Vcc
+        with self.assertRaises(ValueError):
+            cpas.resistenza_limitazione_led(0, 2, 20)
+        with self.assertRaises(ValueError):
+            cpas.resistenza_limitazione_led(9, 2, 0)
+
+    # ---- Partitore di tensione ----
+
+    def test_partitore_tensione_vout(self):
+        r = cpas.partitore_tensione_vout(12, 1000, 2000)
+        self.assertAlmostEqual(r["v_out"], 8.0)
+        self.assertAlmostEqual(r["corrente_mA"], 4.0)
+
+    def test_partitore_tensione_r2_round_trip(self):
+        r = cpas.partitore_tensione_r2(12, 4, 1000)
+        self.assertAlmostEqual(r["r2_ohm"], 500.0)
+        verifica = cpas.partitore_tensione_vout(12, 1000, r["r2_ohm"])
+        self.assertAlmostEqual(verifica["v_out"], 4.0)
+
+    def test_partitore_tensione_validazioni(self):
+        with self.assertRaises(ValueError):
+            cpas.partitore_tensione_r2(12, 15, 1000)  # Vout > Vin
+        with self.assertRaises(ValueError):
+            cpas.partitore_tensione_vout(12, 0, 1000)
+
+    # ---- Costante di tempo RC/RL ----
+
+    def test_costante_di_tempo_rc(self):
+        r = cpas.costante_di_tempo("RC", 1000, 1e-6)
+        self.assertAlmostEqual(r["tau_s"], 0.001)
+        self.assertAlmostEqual(r["percentuale_a_5tau"], 99.326, places=2)
+
+    def test_costante_di_tempo_rl(self):
+        r = cpas.costante_di_tempo("RL", 10, 0.1)
+        self.assertAlmostEqual(r["tau_s"], 0.01)
+
+    def test_costante_di_tempo_percentuale_alta_richiede_piu_tempo(self):
+        basso = cpas.costante_di_tempo("RC", 1000, 1e-6, 50)
+        alto = cpas.costante_di_tempo("RC", 1000, 1e-6, 95)
+        self.assertGreater(alto["tempo_target_s"], basso["tempo_target_s"])
+
+    def test_costante_di_tempo_validazioni(self):
+        with self.assertRaises(ValueError):
+            cpas.costante_di_tempo("XX", 100, 1e-6)
+        with self.assertRaises(ValueError):
+            cpas.costante_di_tempo("RC", 100, 1e-6, 100)
+
+    # ---- Ponte di Wheatstone ----
+
+    def test_wheatstone_resistenza_incognita(self):
+        r = cpas.wheatstone_resistenza_incognita(100, 200, 150)
+        self.assertAlmostEqual(r["rx_ohm"], 300.0)
+
+    def test_wheatstone_validazioni(self):
+        with self.assertRaises(ValueError):
+            cpas.wheatstone_resistenza_incognita(0, 1, 1)
+
+    # ---- AWG <-> mm² ----
+
+    def test_awg_a_mm2_valori_noti(self):
+        r = cpas.awg_a_mm2(0)
+        self.assertAlmostEqual(r["diametro_mm"], 8.251, places=2)
+
+    def test_awg_mm2_round_trip(self):
+        r = cpas.mm2_a_awg(2.5)
+        self.assertEqual(r["awg_piu_vicino"], 13)
+        ritorno = cpas.awg_a_mm2(r["awg_piu_vicino"])
+        self.assertAlmostEqual(ritorno["area_mm2"], 2.5, delta=0.3)
+
+    def test_awg_validazioni(self):
+        with self.assertRaises(ValueError):
+            cpas.awg_a_mm2(100)
+        with self.assertRaises(ValueError):
+            cpas.mm2_a_awg(0)
+
+    # ---- Resistori SMD ----
+
+    def test_decodifica_smd_standard_3_cifre(self):
+        r = cpas.decodifica_smd_standard("103")
+        self.assertAlmostEqual(r["valore_ohm"], 10000.0)
+
+    def test_decodifica_smd_standard_4_cifre(self):
+        r = cpas.decodifica_smd_standard("1002")
+        self.assertAlmostEqual(r["valore_ohm"], 10000.0)
+
+    def test_decodifica_smd_standard_notazione_r(self):
+        self.assertAlmostEqual(cpas.decodifica_smd_standard("4R7")["valore_ohm"], 4.7)
+        self.assertAlmostEqual(cpas.decodifica_smd_standard("R47")["valore_ohm"], 0.47)
+
+    def test_decodifica_smd_standard_validazioni(self):
+        with self.assertRaises(ValueError):
+            cpas.decodifica_smd_standard("12345")
+        with self.assertRaises(ValueError):
+            cpas.decodifica_smd_standard("")
+
+    def test_decodifica_smd_eia96(self):
+        r = cpas.decodifica_smd_eia96("01A")
+        self.assertAlmostEqual(r["valore_ohm"], 1.0)
+        r2 = cpas.decodifica_smd_eia96("68C")
+        self.assertAlmostEqual(r2["valore_ohm"], 499.0)
+
+    def test_decodifica_smd_eia96_validazioni(self):
+        with self.assertRaises(ValueError):
+            cpas.decodifica_smd_eia96("99A")  # indice fuori range 1-96
+        with self.assertRaises(ValueError):
+            cpas.decodifica_smd_eia96("01Q")  # lettera non riconosciuta
+
+    # ---- Filtro RC/RL — frequenza di taglio ----
+
+    def test_frequenza_taglio_rc(self):
+        r = cpas.frequenza_taglio_rc_rl("RC", 1000, 1e-6)
+        self.assertAlmostEqual(r["fc_Hz"], 159.155, places=2)
+
+    def test_frequenza_taglio_rl(self):
+        r = cpas.frequenza_taglio_rc_rl("RL", 1000, 0.1)
+        self.assertAlmostEqual(r["fc_Hz"], 1591.55, places=1)
+
+    def test_frequenza_taglio_validazioni(self):
+        with self.assertRaises(ValueError):
+            cpas.frequenza_taglio_rc_rl("XX", 100, 1e-6)
+        with self.assertRaises(ValueError):
+            cpas.frequenza_taglio_rc_rl("RC", 0, 1e-6)
+
+    # ---- Amplificatore operazionale ----
+
+    def test_guadagno_op_amp_invertente(self):
+        r = cpas.guadagno_op_amp("Invertente", 1000, 10000)
+        self.assertAlmostEqual(r["guadagno"], -10.0)
+        self.assertAlmostEqual(r["guadagno_dB"], 20.0)
+
+    def test_guadagno_op_amp_non_invertente(self):
+        r = cpas.guadagno_op_amp("Non invertente", 1000, 10000)
+        self.assertAlmostEqual(r["guadagno"], 11.0)
+
+    def test_guadagno_op_amp_validazioni(self):
+        with self.assertRaises(ValueError):
+            cpas.guadagno_op_amp("Boh", 1000, 1000)
+        with self.assertRaises(ValueError):
+            cpas.guadagno_op_amp("Invertente", 0, 1000)
+
+    # ---- Diodo Zener ----
+
+    def test_diodo_zener_regolatore_ok(self):
+        r = cpas.diodo_zener_regolatore(12, 5.1, 220, 1000)
+        self.assertAlmostEqual(r["i_totale_mA"], 31.3636, places=3)
+        self.assertAlmostEqual(r["i_carico_mA"], 5.1)
+        self.assertAlmostEqual(r["i_zener_mA"], 26.2636, places=3)
+        self.assertTrue(r["regolazione_ok"])
+
+    def test_diodo_zener_regolatore_non_regola(self):
+        r = cpas.diodo_zener_regolatore(6, 5.1, 1000, 100)
+        self.assertFalse(r["regolazione_ok"])
+        self.assertLess(r["i_zener_mA"], 0)
+
+    def test_diodo_zener_regolatore_validazioni(self):
+        with self.assertRaises(ValueError):
+            cpas.diodo_zener_regolatore(5, 6, 100, 100)  # Vz >= Vin
+        with self.assertRaises(ValueError):
+            cpas.diodo_zener_regolatore(12, 5.1, 0, 1000)
 
 
 if __name__ == "__main__":

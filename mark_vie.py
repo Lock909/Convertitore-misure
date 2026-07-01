@@ -908,3 +908,153 @@ def cerca_troubleshooting(testo: str) -> list:
         return list(TROUBLESHOOTING)
     return [v for v in TROUBLESHOOTING
             if t in f"{v['sintomo']} {v['componente']} {v['dove']} {v['doc']} {v['sezione']}".lower()]
+
+
+# ==============================================================================
+# 9. Checklist di commissioning — sequenza generale di buona pratica per un
+# sistema di controllo turbina Mark VI/VIe (verifiche pre-avviamento, I/O,
+# ridondanza, protezioni, logica applicativa). Sequenza didattica basata sulle
+# normali fasi di commissioning di un DCS/TCS industriale; per la procedura
+# di dettaglio del singolo impianto fare riferimento alle istruzioni di
+# commissioning specifiche del progetto e ai manuali GEH-6721 Vol. I/II.
+# ==============================================================================
+CHECKLIST_COMMISSIONING = [
+    {
+        "fase": "1. Verifiche preliminari",
+        "voci": [
+            "Documentazione as-built (schemi elettrici, I/O list, application code) disponibile e in revisione corrente",
+            "Tutte le alimentazioni di campo e di armadio isolate/etichettate prima dei lavori su cablaggio",
+            "Continuità e isolamento dei cavi di campo verificati (megaohmetro dove applicabile)",
+            "Messa a terra di armadio, schermi cavo e barra di terra strumentale verificata",
+            "Backup della configurazione ToolboxST corrente effettuato prima di qualsiasi download",
+        ],
+    },
+    {
+        "fase": "2. Accensione e diagnostica di base",
+        "voci": [
+            "Sequenza di power-up rispettata (alimentazioni ausiliarie prima dei controllori/pacchi I/O)",
+            "Tensioni di alimentazione di ciascun pacco I/O entro range (es. TBCI H1/H2/H3) verificate",
+            "LED diagnostici di controllori e pacchi I/O in stato normale (nessun guasto/health bit attivo)",
+            "Comunicazione IONet tra controllore e tutti i pacchi I/O stabilita (nessun pacco offline)",
+            "Orologio di sistema e versione firmware/ToolboxST coerenti su tutti i nodi",
+        ],
+    },
+    {
+        "fase": "3. Verifica punto-per-punto I/O",
+        "voci": [
+            "Ingressi analogici (PAIC/PHRA): loop check 4-20 mA / 0-10 V con simulatore, confronto con Watch Window",
+            "RTD/Termocoppie (PRTD/PTCC): verifica con simulatore di resistenza/f.e.m. e confronto temperatura attesa",
+            "Ingressi digitali (TBCI/TICI): forzatura contatto di campo e verifica stato in ToolboxST",
+            "Uscite digitali/relè (TRLYH1x): comando da Watch Window e verifica continuità/azionamento a bordo macchina",
+            "Uscite analogiche e servovalvole (PSVO): verifica corsa e linearità su tutto il campo di uscita",
+            "Tutti i punti I/O coperti dalla I/O list di progetto e nessun punto 'non cablato' lasciato senza nota",
+        ],
+    },
+    {
+        "fase": "4. Ridondanza e voting",
+        "voci": [
+            "Architettura realizzata (Simplex/Dual/TMR) corrisponde a quanto da progetto",
+            "State exchange tra controllori ridondanti verificato (nessun disaccordo in condizioni statiche)",
+            "Simulazione di guasto/scollegamento di un canale: voting 2oo3 o failover Dual eseguito senza upset di processo",
+            "Reinserimento a caldo di un canale precedentemente guasto verificato (auto-reconfiguration pacchi I/O)",
+            "Switch di rete IONet ridondanti verificati singolarmente (spegnimento di un percorso senza perdita di controllo)",
+        ],
+    },
+    {
+        "fase": "5. Protezioni di sicurezza",
+        "voci": [
+            "Catena di trip di emergenza (PPRO/TREA) provata con segnale simulato, indipendentemente dalla protezione primaria",
+            "Catena di trip primario (PTUR/TRPG) provata con segnale simulato",
+            "Soglia di sovravelocità verificata sui tre canali voting (valore e tempo di risposta)",
+            "Prova di trip manuale (pulsante/comando operatore) verificata end-to-end fino all'attuatore finale",
+            "Tempi di risposta della catena di trip misurati e confrontati con i requisiti di progetto",
+        ],
+    },
+    {
+        "fase": "6. Logica applicativa e HMI",
+        "voci": [
+            "Sequenze di avviamento/arresto verificate passo-passo in modalità manuale/assistita",
+            "Interblocchi e permessi (permissive) verificati forzando le condizioni di blocco",
+            "Allarmi critici generati e visualizzati correttamente su WorkstationST/HMI, con instradamento corretto",
+            "Storicizzazione (Historian/Trender) attiva sulle variabili di processo principali",
+            "Coding Practices Report eseguito in ToolboxST e anomalie residue chiuse o giustificate",
+        ],
+    },
+    {
+        "fase": "7. Chiusura commissioning",
+        "voci": [
+            "Tutte le non conformità aperte durante le prove tracciate e chiuse (o accettate con firma)",
+            "Configurazione finale ToolboxST scaricata, verificata con Compare to Controller e archiviata (CMS)",
+            "Documentazione as-built aggiornata con le modifiche emerse in fase di commissioning",
+            "Checklist firmata dal responsabile di commissioning e dal cliente/utente finale",
+        ],
+    },
+]
+
+
+def checklist_commissioning_flat() -> list:
+    """Versione 'piatta' della checklist, con un id stabile per voce (fase_idx, voce_idx),
+    utile per la persistenza dello stato di completamento nella UI."""
+    out = []
+    for fi, blocco in enumerate(CHECKLIST_COMMISSIONING):
+        for vi, voce in enumerate(blocco["voci"]):
+            out.append({"id": f"{fi}_{vi}", "fase": blocco["fase"], "voce": voce})
+    return out
+
+
+# ==============================================================================
+# 10. Loading rete IONet — stima semplificata del traffico ciclico I/O
+# Modello didattico: ogni pacco I/O scambia con il controllore un piccolo
+# datagramma Ethernet a ogni frame di scansione (tipicamente 100 Hz per
+# Mark VIe, GEH-6721 Vol. I). Non è il modello di traffico certificato GE
+# (che dipende da dettagli di protocollo non pubblici); utile per una stima
+# di massima del margine di banda disponibile su una IONet a 100 Mbps.
+# ==============================================================================
+IONET_BANDA_TIPICA_MBPS = 100.0
+IONET_OVERHEAD_BYTE = 64        # intestazioni Ethernet/IP/UDP tipiche di un datagramma ciclico
+IONET_BYTE_PER_CANALE = 4.0     # stima dati utili per canale I/O (valore + stato)
+IONET_UTILIZZO_RACCOMANDATO_PCT = 40.0  # margine ingegneristico tipico per traffico ciclico + diagnostica/burst
+
+
+def loading_ionet(
+    n_pacchi_io: int,
+    canali_medi_per_pacco: float = 16.0,
+    frame_rate_hz: float = 100.0,
+    banda_rete_mbps: float = IONET_BANDA_TIPICA_MBPS,
+    overhead_byte: float = IONET_OVERHEAD_BYTE,
+    byte_per_canale: float = IONET_BYTE_PER_CANALE,
+) -> dict:
+    """
+    Stima il carico (% di banda occupata) su una rete IONet dato il numero di
+    pacchi I/O collegati, i canali medi per pacco e il frame rate di scansione.
+
+    bytes_per_pacco_per_frame = overhead + canali_medi_per_pacco * byte_per_canale
+    bit_rate_totale = bytes_per_pacco_per_frame * 8 * frame_rate_hz * n_pacchi_io
+    utilizzo_pct = bit_rate_totale / banda_rete
+    """
+    if n_pacchi_io <= 0:
+        raise ValueError("Il numero di pacchi I/O deve essere > 0.")
+    if canali_medi_per_pacco <= 0:
+        raise ValueError("I canali medi per pacco devono essere > 0.")
+    if frame_rate_hz <= 0 or banda_rete_mbps <= 0:
+        raise ValueError("Frame rate e banda di rete devono essere > 0.")
+
+    bytes_per_pacco = overhead_byte + canali_medi_per_pacco * byte_per_canale
+    bit_rate_per_pacco_bps = bytes_per_pacco * 8.0 * frame_rate_hz
+    bit_rate_totale_bps = bit_rate_per_pacco_bps * n_pacchi_io
+    banda_bps = banda_rete_mbps * 1.0e6
+    utilizzo_pct = bit_rate_totale_bps / banda_bps * 100.0
+
+    n_pacchi_max_raccomandato = math.floor(
+        (banda_bps * IONET_UTILIZZO_RACCOMANDATO_PCT / 100.0) / bit_rate_per_pacco_bps
+    ) if bit_rate_per_pacco_bps > 0 else 0
+
+    return {
+        "bytes_per_pacco_per_frame": round(bytes_per_pacco, 1),
+        "bit_rate_totale_Mbps": round(bit_rate_totale_bps / 1.0e6, 3),
+        "utilizzo_pct": round(utilizzo_pct, 2),
+        "entro_margine_raccomandato": utilizzo_pct <= IONET_UTILIZZO_RACCOMANDATO_PCT,
+        "margine_raccomandato_pct": IONET_UTILIZZO_RACCOMANDATO_PCT,
+        "n_pacchi_max_raccomandato": max(n_pacchi_max_raccomandato, 0),
+        "n_pacchi_io": n_pacchi_io,
+    }

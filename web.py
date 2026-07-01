@@ -14,6 +14,11 @@ try:
     _PLOTLY = True
 except ImportError:
     _PLOTLY = False
+try:
+    import qrcode
+    _QRCODE = True
+except ImportError:
+    _QRCODE = False
 
 import automazione
 import formule
@@ -64,6 +69,9 @@ import costi_energetici as cen
 import libreria_cavi as libcavi
 import riferimento_rapido as rifr
 import canaline_passerelle as canp
+import batch_cavi
+import batterie_litio as blit
+import componenti_passivi as cpas
 from costanti import SEZIONI_COMMERCIALI, TENSIONE_MONOFASE, TENSIONE_TRIFASE
 
 
@@ -319,6 +327,21 @@ def _export_csv_button(strumento: str, dati: dict, key: str) -> None:
             except ValueError as e:
                 st.error(str(e))
 
+    if _QRCODE:
+        with st.expander("📱 QR Code (per smartphone)"):
+            righe_qr = [strumento] + [f"{k}: {v}" for k, v in dati_export.items()]
+            testo_qr = "\n".join(righe_qr)
+            if len(testo_qr) > 700:
+                testo_qr = testo_qr[:697] + "..."
+            st.image(_qr_bytes(testo_qr), caption="Inquadra per leggere il risultato sullo schermo del telefono", width=220)
+            st.download_button(
+                "📥 Scarica QR Code",
+                data=_qr_bytes(testo_qr),
+                file_name=f"{nome_file}_qr.png",
+                mime="image/png",
+                key=f"{key}_qr_dl",
+            )
+
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["Strumento", strumento])
@@ -350,6 +373,74 @@ def _export_csv_button(strumento: str, dati: dict, key: str) -> None:
             )
         except Exception:
             st.caption("PDF non disponibile")
+
+
+def _qr_bytes(testo: str) -> bytes:
+    """Genera un QR code PNG (bytes) che codifica il testo fornito."""
+    img = qrcode.make(testo, error_correction=qrcode.constants.ERROR_CORRECT_M)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _warn_range(valore: float, minimo: float, massimo: float,
+                etichetta: str, unita: str = "") -> None:
+    """Avviso NON bloccante se un valore è fuori da un range plausibile.
+
+    Non interrompe il calcolo: serve solo a segnalare un possibile errore di
+    inserimento (es. tensione BT a 50000 V, cos phi a 3, temperatura a 200 °C).
+    """
+    try:
+        v = float(valore)
+    except (TypeError, ValueError):
+        return
+    if v < minimo or v > massimo:
+        u = f" {unita}" if unita else ""
+        st.warning(
+            f"⚠️ {etichetta}: il valore {v:g}{u} è fuori dal range plausibile "
+            f"({minimo:g}–{massimo:g}{u}). Verifica di non aver sbagliato a digitare."
+        )
+
+
+def _lista_componenti_interattiva(chiave: str, etichetta_unita: str, valore_default: float = 100.0) -> list:
+    """Lista interattiva aggiungi/rimuovi per componenti in numero variabile
+    (es. resistori, induttori, condensatori in serie/parallelo).
+
+    Usa id univoci (non l'indice di posizione) come chiave dei widget, così
+    rimuovere un componente in mezzo alla lista non fa "scivolare" per errore
+    il valore di un altro componente su una chiave diversa.
+
+    Ritorna la lista dei valori correnti, nello stesso ordine mostrato a schermo.
+    """
+    chiave_ids = f"_{chiave}_ids"
+    chiave_contatore = f"_{chiave}_contatore"
+    if chiave_ids not in st.session_state:
+        st.session_state[chiave_ids] = [0, 1]
+        st.session_state[chiave_contatore] = 2
+
+    valori = []
+    for comp_id in list(st.session_state[chiave_ids]):
+        col_val, col_rm = st.columns([6, 1])
+        with col_val:
+            v = st.number_input(
+                f"Componente #{comp_id + 1} [{etichetta_unita}]",
+                value=valore_default, min_value=0.000001, key=f"{chiave}_v_{comp_id}",
+            )
+            valori.append(v)
+        with col_rm:
+            st.write("")  # allinea verticalmente il bottone con il campo
+            if len(st.session_state[chiave_ids]) > 1:
+                if st.button("🗑️", key=f"{chiave}_rm_{comp_id}"):
+                    st.session_state[chiave_ids].remove(comp_id)
+                    st.rerun()
+
+    if st.button("➕ Aggiungi componente", key=f"{chiave}_add"):
+        nuovo_id = st.session_state[chiave_contatore]
+        st.session_state[chiave_ids].append(nuovo_id)
+        st.session_state[chiave_contatore] += 1
+        st.rerun()
+
+    return valori
 
 
 # ── Rilevamento dispositivo ────────────────────────────────────────────────────
@@ -395,6 +486,9 @@ def _build_tool_index() -> list:
         "Tabelle di Riferimento Rapido (cavi, colori, IP, IE)",
         "Canaline / Passerelle — Riempimento e Derating",
         "Portata Cavo + Caduta di Tensione (combinato)",
+        "Dimensionamento Cavi in Batch (tabella/CSV)",
+        "Caduta di Tensione — Confronto A/B",
+        "Componenti Passivi (Resistori, Condensatori, Induttori)",
     ], "⚡  Calcoli Elettrici", "elett_tipo")
 
     _add([
@@ -500,7 +594,7 @@ def _load_device_data() -> dict:
     if "_device_data" in st.session_state:
         return st.session_state["_device_data"]
     path = _device_data_path(_get_device_id())
-    data = {"favorites": [], "history": [], "projects": {}}
+    data = {"favorites": [], "history": [], "projects": {}, "settings": {}, "checklist_mv": {}}
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -510,6 +604,8 @@ def _load_device_data() -> dict:
     data.setdefault("favorites", [])
     data.setdefault("history", [])
     data.setdefault("projects", {})
+    data.setdefault("settings", {})
+    data.setdefault("checklist_mv", {})
     st.session_state["_device_data"] = data
     return data
 
@@ -691,7 +787,39 @@ with st.sidebar:
                 _render_entry_row(entry, "⭐", "fav_sidebar", i, compact=True)
 
     st.markdown("---")
+    _schermo_grande = st.checkbox(
+        "🔍 Modalità schermo grande",
+        value=_dd_sidebar["settings"].get("schermo_grande", False),
+        key="schermo_grande_toggle",
+        help="Aumenta testi, pulsanti e campi per leggere e toccare meglio da distante o con i guanti.",
+    )
+    if _schermo_grande != _dd_sidebar["settings"].get("schermo_grande", False):
+        _dd_sidebar["settings"]["schermo_grande"] = _schermo_grande
+        _save_device_data(_dd_sidebar)
+
+    st.markdown("---")
     st.caption("v4.0 · CEI 64-8 · ISO 10816 · IEC 60034-30 · EN 12464-1")
+
+if st.session_state.get("schermo_grande_toggle"):
+    st.markdown("""
+<style>
+[data-testid="block-container"] * { font-size: 1.12rem !important; }
+h1 { font-size: 2.0rem !important; }
+h2 { font-size: 1.55rem !important; }
+h3 { font-size: 1.3rem !important; }
+button, [data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-primary"] {
+    min-height: 3.2rem !important; font-size: 1.15rem !important; padding: 0.5rem 1rem !important;
+}
+input, textarea { font-size: 1.15rem !important; padding: 0.55rem !important; }
+[data-baseweb="select"] { font-size: 1.15rem !important; min-height: 3.0rem !important; }
+[data-testid="stNumberInputStepUp"], [data-testid="stNumberInputStepDown"] {
+    min-width: 2.8rem !important; min-height: 2.8rem !important;
+}
+[data-testid="stMetricValue"] { font-size: 2.2rem !important; }
+[data-testid="stMetricLabel"] { font-size: 1.05rem !important; }
+.stCheckbox label, .stRadio label { font-size: 1.1rem !important; }
+</style>
+""", unsafe_allow_html=True)
 
 
 # ── Home ──────────────────────────────────────────────────────────────────────
@@ -921,6 +1049,9 @@ elif categoria == "⚡  Calcoli Elettrici":
             "Tabelle di Riferimento Rapido (cavi, colori, IP, IE)",
             "Canaline / Passerelle — Riempimento e Derating",
             "Portata Cavo + Caduta di Tensione (combinato)",
+            "Dimensionamento Cavi in Batch (tabella/CSV)",
+            "Caduta di Tensione — Confronto A/B",
+            "Componenti Passivi (Resistori, Condensatori, Induttori)",
         ],
         key="elett_tipo",
     )
@@ -1136,17 +1267,43 @@ elif categoria == "⚡  Calcoli Elettrici":
         mat = st.radio("Materiale Conduttore:", ["Rame", "Alluminio"], key="cdv_mat")
         fasi = st.selectbox("Linea elettrica:", ["Monofase", "Trifase"], key="cdv_fasi")
         amp = st.number_input("Corrente Ib [A]:", value=16.0, key="cdv_amp")
+        _warn_range(amp, 0.1, 2000, "Corrente Ib", "A")
         metri = st.number_input("Lunghezza [Metri]:", value=50.0, key="cdv_metri")
-        sez = st.selectbox("Sezione mm2:", SEZIONI_COMMERCIALI, key="cdv_sez")
-        isol = st.selectbox("Isolante Cavo:", ["PVC (70C)", "EPR / XLPE / Gomma (90C)"], key="cdv_isol")
-        cos_phi = st.number_input("cos phi:", value=0.85, min_value=0.1, max_value=1.0, key="cdv_cosphi")
-        temp_ambiente = st.slider("Temperatura Ambiente (C):", min_value=10, max_value=60, value=30, step=5, key="cdv_temp")
-        n_circuiti = st.number_input("Numero di Cavi affiancati:", min_value=1, max_value=20, value=1, key="cdv_ncir")
+        _warn_range(metri, 0.1, 5000, "Lunghezza linea", "m")
+        sez = st.selectbox(
+            "Sezione mm2:", SEZIONI_COMMERCIALI, key="cdv_sez",
+            help="Sezione commerciale del conduttore (serie CEI-UNEL). Deve coincidere con la "
+                 "portata Iz dichiarata sotto: non viene ricalcolata automaticamente in questo calcolo.",
+        )
+        isol = st.selectbox(
+            "Isolante Cavo:", ["PVC (70C)", "EPR / XLPE / Gomma (90C)"], key="cdv_isol",
+            help="Temperatura massima di esercizio del conduttore (CEI-UNEL 35024/1): 70°C per PVC, "
+                 "90°C per EPR/XLPE/Gomma. Determina il fattore di correzione per resistività e derating termico.",
+        )
+        cos_phi = st.number_input(
+            "cos phi:", value=0.85, min_value=0.1, max_value=1.0, key="cdv_cosphi",
+            help="Fattore di potenza del carico. Influenza la componente reattiva della caduta di "
+                 "tensione (CEI 64-8); tipico 0.8-0.9 per carichi industriali, 0.95-1.0 per carichi resistivi.",
+        )
+        temp_ambiente = st.slider(
+            "Temperatura Ambiente (C):", min_value=10, max_value=60, value=30, step=5, key="cdv_temp",
+            help="Temperatura ambiente di posa. La tabella CEI-UNEL 35024/1 è riferita a 30°C in aria / "
+                 "20°C nel terreno: valori diversi applicano un fattore di derating alla portata.",
+        )
+        n_circuiti = st.number_input(
+            "Numero di Cavi affiancati:", min_value=1, max_value=20, value=1, key="cdv_ncir",
+            help="Numero di circuiti/cavi multipolari posati a contatto sulla stessa passerella/tubo: "
+                 "il raggruppamento riduce la portata per il mutuo riscaldamento (CEI-UNEL 35024/1, tabella raggruppamento).",
+        )
         n_parallelo_cdv = st.number_input(
             "Conduttori in parallelo per fase:", min_value=1, max_value=10, value=1, step=1,
             key="cdv_npar", help="Numero di cavi identici posati in parallelo sulla stessa fase.",
         )
-        iz_tabella = st.number_input("Portata Nominale catalogo Iz [A] (a 30C, per conduttore):", value=20.0, key="cdv_iz")
+        iz_tabella = st.number_input(
+            "Portata Nominale catalogo Iz [A] (a 30C, per conduttore):", value=20.0, key="cdv_iz",
+            help="Portata di base da tabella CEI-UNEL 35024/1 per la sezione/isolante/posa scelti, "
+                 "riferita a 30°C senza raggruppamento. Si trova nelle tabelle norma o nel datasheet del cavo.",
+        )
         considera_x_cdv = st.checkbox(
             "Considera reattanza X nel calcolo", value=True, key="cdv_considera_x",
             help="Significativa per sezioni grandi (≥95 mm²); per sezioni piccole il contributo "
@@ -1162,6 +1319,8 @@ elif categoria == "⚡  Calcoli Elettrici":
                 "Posa Interrata",
             ],
             key="cdv_posa",
+            help="Metodo di installazione secondo le tabelle di posa CEI 64-8 / CEI-UNEL 35024/1: "
+                 "incide sul fattore di dissipazione termica e quindi sulla portata ammissibile.",
         )
 
         if "Interrata" in posa:
@@ -1288,14 +1447,22 @@ elif categoria == "⚡  Calcoli Elettrici":
 
         col1, col2 = st.columns(2)
         with col1:
-            Ib_pc = st.number_input("Corrente di impiego Ib [A]:", value=25.0, min_value=0.1, key="pc_Ib")
+            Ib_pc = st.number_input(
+                "Corrente di impiego Ib [A]:", value=25.0, min_value=0.1, key="pc_Ib",
+                help="Corrente di progetto del circuito (carico massimo previsto). Per CEI 64-8 deve "
+                     "risultare Ib ≤ In ≤ Iz, dove In è la corrente nominale della protezione.",
+            )
             iso_pc = st.selectbox("Isolante:", pcav.lista_isolanti(),
                                   format_func=lambda x: "PVC (70 °C)" if x == "PVC" else "EPR / XLPE (90 °C)",
-                                  key="pc_iso")
+                                  key="pc_iso",
+                                  help="Temperatura massima di esercizio del conduttore (CEI-UNEL 35024/1): "
+                                       "determina la tabella di portata da usare.")
         with col2:
             if not usa_datasheet_pc:
                 posa_pc = st.selectbox("Metodo di posa:", pcav.lista_metodi_posa(),
-                                       format_func=lambda x: f"{x} — {pcav.METODI_POSA[x]}", key="pc_posa")
+                                       format_func=lambda x: f"{x} — {pcav.METODI_POSA[x]}", key="pc_posa",
+                                       help="Metodo di installazione secondo le tabelle CEI-UNEL 35024/1: "
+                                            "incide sulla capacità di dissipazione termica del cavo.")
             else:
                 iz0_datasheet_pc = st.number_input(
                     "Portata Iz0 da datasheet a 30°C [A] (per conduttore):", value=30.0, min_value=0.1,
@@ -1303,9 +1470,17 @@ elif categoria == "⚡  Calcoli Elettrici":
                 )
         col3, col4, col5 = st.columns(3)
         with col3:
-            T_pc = st.slider("Temperatura ambiente [°C]:", 10, 60, 30, step=5, key="pc_T")
+            T_pc = st.slider(
+                "Temperatura ambiente [°C]:", 10, 60, 30, step=5, key="pc_T",
+                help="La tabella CEI-UNEL 35024/1 è riferita a 30°C in aria: temperature diverse "
+                     "applicano un fattore di correzione k1 alla portata.",
+            )
         with col4:
-            n_pc = st.number_input("Circuiti raggruppati:", min_value=1, max_value=20, value=1, step=1, key="pc_n")
+            n_pc = st.number_input(
+                "Circuiti raggruppati:", min_value=1, max_value=20, value=1, step=1, key="pc_n",
+                help="Numero di circuiti/cavi multipolari posati a contatto: il raggruppamento riduce "
+                     "la portata per il mutuo riscaldamento (fattore di correzione k2, CEI-UNEL 35024/1).",
+            )
         with col5:
             n_parallelo_pc = st.number_input(
                 "Conduttori in parallelo per fase:", min_value=1, max_value=10, value=1, step=1,
@@ -1441,12 +1616,126 @@ elif categoria == "⚡  Calcoli Elettrici":
                 }
                 _export_csv_button("Portata + Caduta combinato", dati_comb, key="comb_export")
 
+    elif tipo == "Dimensionamento Cavi in Batch (tabella/CSV)":
+        st.subheader("Dimensionamento di più linee in una volta")
+        st.caption("Compila la tabella (o incolla righe da un foglio di calcolo) e dimensiona tutte "
+                   "le linee insieme: sezione minima da portata CEI-UNEL 35024 + verifica caduta CEI 64-8. "
+                   "Conduttore in rame. fasi: Monofase/Trifase · isolante: PVC/EPR · posa: B1/B2/C/E.")
+
+        _righe_default = pd.DataFrame([
+            {"nome": "Linea 1", "fasi": "Trifase", "Ib_A": 16.0, "lunghezza_m": 30.0, "cos_phi": 0.9,
+             "isolante": "PVC", "posa": "C", "T_amb": 30.0, "n_circuiti": 1, "n_parallelo": 1},
+            {"nome": "Linea 2", "fasi": "Monofase", "Ib_A": 10.0, "lunghezza_m": 25.0, "cos_phi": 0.9,
+             "isolante": "PVC", "posa": "C", "T_amb": 30.0, "n_circuiti": 1, "n_parallelo": 1},
+        ])
+        tabella_in = st.data_editor(
+            _righe_default, num_rows="dynamic", use_container_width=True, key="batch_editor",
+        )
+
+        if st.button("Dimensiona tutte le linee", key="batch_btn"):
+            linee = tabella_in.to_dict("records")
+            risultati = batch_cavi.dimensiona_batch(linee)
+            st.session_state["_batch_result"] = risultati
+
+        rb = st.session_state.get("_batch_result")
+        if rb:
+            df_out = pd.DataFrame(rb)
+            n_ok = sum(1 for r in rb if r["esito"] == "OK")
+            n_tot = len(rb)
+            if n_ok == n_tot:
+                st.success(f"Tutte le {n_tot} linee sono a norma (sezione adeguata e caduta ≤ 4%).")
+            else:
+                st.warning(f"{n_ok}/{n_tot} linee a norma. Controlla le righe con esito diverso da OK.")
+            st.dataframe(df_out, use_container_width=True)
+
+            csv_out = df_out.to_csv(index=False)
+            st.download_button(
+                "📥 Esporta risultati in CSV",
+                data=csv_out, file_name="dimensionamento_cavi_batch.csv",
+                mime="text/csv", key="batch_export",
+            )
+
+    elif tipo == "Caduta di Tensione — Confronto A/B":
+        st.subheader("Confronto affiancato di due scenari di caduta di tensione")
+        st.caption("Imposta due varianti (es. due sezioni diverse, o due lunghezze) e confrontale "
+                   "fianco a fianco. Conduttore in rame, metodo C, reattanza inclusa.")
+
+        _posa_cmp = "Metodo C (A vista a parete)"
+        _isolanti_cmp = ["PVC (70C)", "EPR / XLPE / Gomma (90C)"]
+
+        def _scenario_inputs(label: str, key: str, sez_default):
+            st.markdown(f"#### Scenario {label}")
+            fasi = st.selectbox("Linea:", ["Monofase", "Trifase"], key=f"{key}_fasi")
+            amp = st.number_input("Corrente Ib [A]:", value=16.0, min_value=0.1, key=f"{key}_amp")
+            metri = st.number_input("Lunghezza [m]:", value=50.0, min_value=0.1, key=f"{key}_metri")
+            sez = st.selectbox("Sezione [mm²]:", SEZIONI_COMMERCIALI,
+                               index=SEZIONI_COMMERCIALI.index(sez_default), key=f"{key}_sez")
+            isol = st.selectbox("Isolante:", _isolanti_cmp, key=f"{key}_isol")
+            cos_phi = st.number_input("cos phi:", value=0.9, min_value=0.1, max_value=1.0, key=f"{key}_cos")
+            return {"fasi": fasi, "amp": amp, "metri": metri, "sez": sez, "isol": isol, "cos_phi": cos_phi}
+
+        colA, colB = st.columns(2)
+        with colA:
+            scen_a = _scenario_inputs("A", "cmpA", 2.5)
+        with colB:
+            scen_b = _scenario_inputs("B", "cmpB", 4)
+
+        def _calcola_scenario(s):
+            dv, t_lav, rho_t, k1, k2, iz_real = formule.calcola_caduta_avanzata(
+                "Rame", s["isol"], _posa_cmp, s["fasi"], s["amp"], s["metri"], s["sez"],
+                s["cos_phi"], 30.0, 20.0, 1,
+            )
+            v_ref = TENSIONE_MONOFASE if s["fasi"] == "Monofase" else TENSIONE_TRIFASE
+            pct = dv / v_ref * 100.0 if dv >= 0 else None
+            return dv, pct
+
+        if st.button("Confronta scenari", key="cmp_btn"):
+            try:
+                dv_a, pct_a = _calcola_scenario(scen_a)
+                dv_b, pct_b = _calcola_scenario(scen_b)
+                st.session_state["_cmp_result"] = {
+                    "a": (scen_a, dv_a, pct_a), "b": (scen_b, dv_b, pct_b),
+                }
+            except ValueError as e:
+                st.session_state["_cmp_result"] = None
+                st.error(str(e))
+
+        rc = st.session_state.get("_cmp_result")
+        if rc:
+            (sa, dv_a, pct_a) = rc["a"]
+            (sb, dv_b, pct_b) = rc["b"]
+            righe = [
+                {"Parametro": "Linea", "Scenario A": sa["fasi"], "Scenario B": sb["fasi"]},
+                {"Parametro": "Ib [A]", "Scenario A": f"{sa['amp']:g}", "Scenario B": f"{sb['amp']:g}"},
+                {"Parametro": "Lunghezza [m]", "Scenario A": f"{sa['metri']:g}", "Scenario B": f"{sb['metri']:g}"},
+                {"Parametro": "Sezione [mm²]", "Scenario A": f"{sa['sez']:g}", "Scenario B": f"{sb['sez']:g}"},
+                {"Parametro": "Isolante", "Scenario A": sa["isol"], "Scenario B": sb["isol"]},
+                {"Parametro": "Caduta [V]", "Scenario A": f"{dv_a:.2f}", "Scenario B": f"{dv_b:.2f}"},
+                {"Parametro": "Caduta [%]", "Scenario A": f"{pct_a:.2f}", "Scenario B": f"{pct_b:.2f}"},
+            ]
+            st.table(righe)
+            if pct_a is not None and pct_b is not None:
+                if pct_a < pct_b:
+                    st.success(f"Scenario A ha la caduta minore ({pct_a:.2f}% vs {pct_b:.2f}%).")
+                elif pct_b < pct_a:
+                    st.success(f"Scenario B ha la caduta minore ({pct_b:.2f}% vs {pct_a:.2f}%).")
+                else:
+                    st.info("I due scenari hanno la stessa caduta di tensione.")
+            dati_cmp = {f"A — {r['Parametro']}": r["Scenario A"] for r in righe}
+            dati_cmp.update({f"B — {r['Parametro']}": r["Scenario B"] for r in righe})
+            _export_csv_button("Caduta Tensione — Confronto A/B", dati_cmp, key="cmp_export")
+
     elif tipo == "Grado di Protezione IP (IEC 60529)":
         st.subheader("Decodifica grado di protezione IP (IEC 60529)")
         col1, col2 = st.columns([2, 1])
         with col1:
-            codice_ip = st.text_input("Codice IP (es. IP65, IP2X, IPX7, IP54CW):",
-                                      value="IP65", key="ip_codice")
+            codice_ip = st.text_input(
+                "Codice IP (es. IP65, IP2X, IPX7, IP54CW):",
+                value="IP65", key="ip_codice",
+                help="IEC 60529: 1ª cifra = protezione da solidi/polvere (0-6), 2ª cifra = protezione "
+                     "da liquidi (0-9). X indica cifra non specificata; lettere addizionali (es. W, M, S) "
+                     "indicano condizioni di prova particolari.",
+            )
         with col2:
             esempio = st.selectbox("…oppure parti da un uso tipico:",
                                    ["—"] + list(gip.IP_ESEMPI_USO.keys()), key="ip_esempio")
@@ -1521,6 +1810,9 @@ elif categoria == "⚡  Calcoli Elettrici":
             st.table(righe_ie)
             st.caption("Valori di rendimento nominale a 50 Hz, 4 poli, tipici per la potenza indicata.")
 
+        with st.expander("📖 Glossario termini e acronimi"):
+            st.table([{"Termine": t, "Significato": d} for t, d in rifr.GLOSSARIO.items()])
+
     elif tipo == "Canaline / Passerelle — Riempimento e Derating":
         st.subheader("Riempimento canalina/passerella portacavi")
         st.caption("Non esiste un limite normativo unico CEI: la soglia indicativa di buona pratica "
@@ -1578,6 +1870,392 @@ elif categoria == "⚡  Calcoli Elettrici":
             }
             _export_csv_button("Canaline — Riempimento", dati_canp, key="canp_export")
 
+    elif tipo == "Componenti Passivi (Resistori, Condensatori, Induttori)":
+        st.subheader("Resistori, condensatori e induttori")
+        st.caption("Codice colori resistori (EIA-RS-279/IEC 60062), combinazioni serie/parallelo e "
+                   "valori normalizzati (serie E, IEC 60063).")
+
+        sotto = st.radio(
+            "Cosa calcolare?",
+            ["Codice colori → valore", "Valore → codice colori",
+             "Resistori / Induttori — Serie e Parallelo", "Condensatori — Serie e Parallelo",
+             "Valore Normalizzato (serie E)", "Resistore SMD (codice)",
+             "LED — Resistenza di limitazione", "Partitore di tensione",
+             "Costante di tempo RC/RL", "Ponte di Wheatstone", "Convertitore AWG ↔ mm²",
+             "Filtro RC/RL — Frequenza di taglio", "Amplificatore operazionale — Guadagno",
+             "Diodo Zener — Regolatore shunt"],
+            key="cpas_sotto", horizontal=True,
+        )
+
+        if sotto == "Codice colori → valore":
+            n_bande = st.radio("Numero di bande:", [3, 4, 5, 6], index=1, horizontal=True, key="cpas_dec_nbande")
+            colori_lista = cpas.lista_colori_resistore()
+            n_cifre = 3 if n_bande in (5, 6) else 2
+            ha_tolleranza = n_bande != 3
+            ha_coeff_temp = n_bande == 6
+
+            etichette_cifre = [f"Cifra {i+1}" for i in range(n_cifre)]
+            cols = st.columns(n_cifre + 1 + int(ha_tolleranza))
+            colori_scelti = []
+            for i in range(n_cifre):
+                with cols[i]:
+                    default_idx = 1 if i == 0 else 0  # Marrone, poi Nero...
+                    colori_scelti.append(st.selectbox(etichette_cifre[i], colori_lista, index=default_idx, key=f"cpas_dec_cifra_{i}"))
+            with cols[n_cifre]:
+                colori_scelti.append(st.selectbox("Moltiplicatore", colori_lista, index=2, key="cpas_dec_molt"))
+            if ha_tolleranza:
+                with cols[n_cifre + 1]:
+                    colori_scelti.append(st.selectbox("Tolleranza", colori_lista, index=10, key="cpas_dec_tol"))
+            if ha_coeff_temp:
+                colore_coeff = st.selectbox("Coeff. temperatura", cpas.lista_colori_coeff_temperatura(),
+                                            key="cpas_dec_coeff")
+                colori_scelti.append(colore_coeff)
+
+            if st.button("Decodifica", key="cpas_dec_btn"):
+                try:
+                    r = cpas.decodifica_colori_resistore(colori_scelti)
+                    st.session_state["_cpas_dec_result"] = r
+                except ValueError as e:
+                    st.session_state["_cpas_dec_result"] = None
+                    st.error(str(e))
+            rr = st.session_state.get("_cpas_dec_result")
+            if rr:
+                msg = (f"**{rr['valore_ohm']:,.0f} Ω** ± {rr['tolleranza_pct']}% "
+                       f"({rr['valore_min_ohm']:,.1f} – {rr['valore_max_ohm']:,.1f} Ω)").replace(",", ".")
+                if "coeff_temperatura_ppm_C" in rr:
+                    msg += f" — coeff. temperatura {rr['coeff_temperatura_ppm_C']} ppm/°C"
+                st.success(msg)
+                _export_csv_button("Componenti — Decodifica colori", rr, key="cpas_dec_export")
+
+        elif sotto == "Valore → codice colori":
+            col1, col2 = st.columns(2)
+            with col1:
+                valore_r = st.number_input("Valore resistenza [Ω]:", value=1000.0, min_value=0.01, key="cpas_cod_valore")
+            with col2:
+                n_bande_c = st.radio("Numero di bande:", [3, 4, 5, 6], index=1, horizontal=True, key="cpas_cod_nbande")
+
+            tolleranza_c = None
+            coeff_temp_c = None
+            if n_bande_c != 3:
+                tolleranza_c = st.selectbox("Tolleranza:", [10.0, 5.0, 2.0, 1.0, 0.5, 0.25, 0.1, 0.05],
+                                            key="cpas_cod_tol")
+            else:
+                st.caption("A 3 bande la tolleranza è implicita: ±20% (nessuna banda dedicata).")
+            if n_bande_c == 6:
+                coeff_temp_c = st.selectbox("Coeff. temperatura [ppm/°C]:",
+                                            sorted(set(cpas.COLORI_COEFF_TEMPERATURA.values())),
+                                            key="cpas_cod_coeff")
+
+            if st.button("Trova bande colore", key="cpas_cod_btn"):
+                try:
+                    r = cpas.colori_da_resistenza(valore_r, int(n_bande_c), tolleranza_c or 5.0, coeff_temp_c)
+                    st.session_state["_cpas_cod_result"] = r
+                except ValueError as e:
+                    st.session_state["_cpas_cod_result"] = None
+                    st.error(str(e))
+            rr = st.session_state.get("_cpas_cod_result")
+            if rr:
+                st.success(f"Bande: **{' — '.join(rr['colori'])}**")
+                st.caption(f"Valore rappresentato: {rr['valore_arrotondato_ohm']:,.0f} Ω".replace(",", "."))
+                _export_csv_button("Componenti — Codice colori", {
+                    "Bande": " - ".join(rr["colori"]), "Valore [Ω]": rr["valore_arrotondato_ohm"],
+                    "Tolleranza [%]": rr["tolleranza_pct"],
+                }, key="cpas_cod_export")
+
+        elif sotto == "Resistori / Induttori — Serie e Parallelo":
+            col1, col2 = st.columns(2)
+            with col1:
+                tipo_comp = st.radio("Componente:", ["Resistori [Ω]", "Induttori [H]"], key="cpas_ri_tipo")
+            with col2:
+                combinazione = st.radio("Combinazione:", ["Serie", "Parallelo"], key="cpas_ri_comb", horizontal=True)
+            unita = "Ω" if tipo_comp.startswith("Resistori") else "H"
+            st.caption("Aggiungi quanti componenti servono: nessun limite fisso a 4.")
+            valori = _lista_componenti_interattiva("cpas_ri", unita, 100.0)
+            if st.button("Calcola equivalente", key="cpas_ri_btn"):
+                try:
+                    if tipo_comp.startswith("Resistori"):
+                        r = cpas.resistori_serie(valori) if combinazione == "Serie" else cpas.resistori_parallelo(valori)
+                    else:
+                        r = cpas.induttori_serie(valori) if combinazione == "Serie" else cpas.induttori_parallelo(valori)
+                    r["n_componenti"] = len(valori)
+                    st.session_state["_cpas_ri_result"] = r
+                except ValueError as e:
+                    st.session_state["_cpas_ri_result"] = None
+                    st.error(str(e))
+            rr = st.session_state.get("_cpas_ri_result")
+            if rr:
+                st.success(f"Valore equivalente ({rr['n_componenti']} componenti): **{rr['valore_equivalente']:,.4g} {unita}**".replace(",", "."))
+                _export_csv_button("Componenti — Serie/Parallelo", rr, key="cpas_ri_export")
+
+        elif sotto == "Condensatori — Serie e Parallelo":
+            combinazione_c = st.radio("Combinazione:", ["Serie", "Parallelo"], key="cpas_c_comb", horizontal=True)
+            st.caption("Aggiungi quanti condensatori servono: nessun limite fisso a 4.")
+            valori_uf = _lista_componenti_interattiva("cpas_c", "µF", 10.0)
+            if st.button("Calcola equivalente", key="cpas_c_btn"):
+                try:
+                    valori_f = [v * 1e-6 for v in valori_uf]
+                    r = cpas.condensatori_serie(valori_f) if combinazione_c == "Serie" else cpas.condensatori_parallelo(valori_f)
+                    r["valore_equivalente_uF"] = r["valore_equivalente"] * 1e6
+                    r["n_componenti"] = len(valori_uf)
+                    st.session_state["_cpas_c_result"] = r
+                except ValueError as e:
+                    st.session_state["_cpas_c_result"] = None
+                    st.error(str(e))
+            rr = st.session_state.get("_cpas_c_result")
+            if rr:
+                st.success(f"Capacità equivalente ({rr['n_componenti']} componenti): **{rr['valore_equivalente_uF']:,.4g} µF**".replace(",", "."))
+                _export_csv_button("Componenti — Condensatori", rr, key="cpas_c_export")
+
+        elif sotto == "Valore Normalizzato (serie E)":
+            col1, col2 = st.columns(2)
+            with col1:
+                valore_norm = st.number_input("Valore da normalizzare:", value=53.0, min_value=0.0001, key="cpas_norm_valore")
+            with col2:
+                serie_norm = st.selectbox("Serie:", cpas.lista_serie_e(), index=2, key="cpas_norm_serie",
+                                          help="E6/E12/E24: resistori/condensatori standard (tolleranza 20/10/5%). "
+                                               "E48/E96: componenti di precisione (2%/1%).")
+            if st.button("Trova valore normalizzato", key="cpas_norm_btn"):
+                try:
+                    r = cpas.valore_normalizzato_e(valore_norm, serie_norm)
+                    st.session_state["_cpas_norm_result"] = r
+                except ValueError as e:
+                    st.session_state["_cpas_norm_result"] = None
+                    st.error(str(e))
+            rr = st.session_state.get("_cpas_norm_result")
+            if rr:
+                st.success(f"Valore normalizzato **{serie_norm}** più vicino: **{rr['valore_normalizzato']:,.4g}** "
+                           f"(scostamento {rr['scostamento_pct']:+.2f}%, tolleranza tipica ±{rr['tolleranza_tipica_pct']}%)".replace(",", "."))
+                _export_csv_button("Componenti — Valore Normalizzato", rr, key="cpas_norm_export")
+
+        elif sotto == "Resistore SMD (codice)":
+            formato_smd = st.radio("Formato marcatura:", ["Standard (3/4 cifre o notazione R)", "EIA-96 (2 cifre + lettera)"],
+                                   key="cpas_smd_formato")
+            if formato_smd.startswith("Standard"):
+                codice_smd = st.text_input("Codice SMD:", value="103", key="cpas_smd_codice",
+                                           help="Es. '103' = 10×10³ = 10 kΩ · '1002' = 100×10² = 10 kΩ · '4R7' = 4.7 Ω")
+                if st.button("Decodifica SMD", key="cpas_smd_btn"):
+                    try:
+                        st.session_state["_cpas_smd_result"] = cpas.decodifica_smd_standard(codice_smd)
+                    except ValueError as e:
+                        st.session_state["_cpas_smd_result"] = None
+                        st.error(str(e))
+            else:
+                codice_smd = st.text_input("Codice EIA-96:", value="01A", key="cpas_smd96_codice",
+                                           help="Es. '01A' = 1.00Ω · '68C' = 4.99×100 = 499 Ω. Lettera = moltiplicatore "
+                                                "(Z=×0.001, R/Y=×0.01, X/S=×0.1, A=×1, B/H=×10, C=×100, D=×1000, E=×10000, F=×100000).")
+                if st.button("Decodifica EIA-96", key="cpas_smd96_btn"):
+                    try:
+                        st.session_state["_cpas_smd_result"] = cpas.decodifica_smd_eia96(codice_smd)
+                    except ValueError as e:
+                        st.session_state["_cpas_smd_result"] = None
+                        st.error(str(e))
+            rr = st.session_state.get("_cpas_smd_result")
+            if rr:
+                st.success(f"**{rr['valore_ohm']:,.4g} Ω**".replace(",", "."))
+                _export_csv_button("Componenti — SMD", rr, key="cpas_smd_export")
+
+        elif sotto == "LED — Resistenza di limitazione":
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                vcc_led = st.number_input("Tensione alimentazione Vcc [V]:", value=9.0, min_value=0.1, key="cpas_led_vcc")
+            with col2:
+                vf_led = st.number_input("Tensione forward LED Vf [V]:", value=2.0, min_value=0.1, key="cpas_led_vf",
+                                        help="Tipica: rosso/giallo ≈1.8-2.2V, verde ≈2.0-3.2V, blu/bianco ≈2.8-3.4V.")
+            with col3:
+                i_led = st.number_input("Corrente desiderata [mA]:", value=20.0, min_value=0.1, key="cpas_led_i")
+            if st.button("Calcola resistenza", key="cpas_led_btn"):
+                try:
+                    st.session_state["_cpas_led_result"] = cpas.resistenza_limitazione_led(vcc_led, vf_led, i_led)
+                except ValueError as e:
+                    st.session_state["_cpas_led_result"] = None
+                    st.error(str(e))
+            rr = st.session_state.get("_cpas_led_result")
+            if rr:
+                st.success(f"Resistenza: **{rr['resistenza_ohm']:,.1f} Ω** — potenza dissipata: {rr['potenza_dissipata_W']:.3f} W "
+                           f"→ usa una resistenza da **{rr['potenza_consigliata_W']:g} W** (margine di sicurezza)".replace(",", "."))
+                _export_csv_button("Componenti — LED", rr, key="cpas_led_export")
+
+        elif sotto == "Partitore di tensione":
+            verso = st.radio("Calcola:", ["Vout (date R1, R2, Vin)", "R2 (dati Vin, Vout target, R1)"],
+                             key="cpas_part_verso", horizontal=True)
+            if verso.startswith("Vout"):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    vin_p = st.number_input("Vin [V]:", value=12.0, key="cpas_part_vin")
+                with col2:
+                    r1_p = st.number_input("R1 [Ω]:", value=1000.0, min_value=0.01, key="cpas_part_r1")
+                with col3:
+                    r2_p = st.number_input("R2 [Ω]:", value=2000.0, min_value=0.01, key="cpas_part_r2")
+                if st.button("Calcola Vout", key="cpas_part_btn"):
+                    try:
+                        st.session_state["_cpas_part_result"] = cpas.partitore_tensione_vout(vin_p, r1_p, r2_p)
+                    except ValueError as e:
+                        st.session_state["_cpas_part_result"] = None
+                        st.error(str(e))
+                rr = st.session_state.get("_cpas_part_result")
+                if rr:
+                    st.success(f"Vout = **{rr['v_out']:.3f} V** (corrente {rr['corrente_mA']:.3f} mA)")
+                    _export_csv_button("Componenti — Partitore", rr, key="cpas_part_export")
+            else:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    vin_p2 = st.number_input("Vin [V]:", value=12.0, key="cpas_part_vin2")
+                with col2:
+                    vout_p2 = st.number_input("Vout target [V]:", value=4.0, key="cpas_part_vout2")
+                with col3:
+                    r1_p2 = st.number_input("R1 [Ω]:", value=1000.0, min_value=0.01, key="cpas_part_r1_2")
+                if st.button("Calcola R2", key="cpas_part_btn2"):
+                    try:
+                        st.session_state["_cpas_part_result2"] = cpas.partitore_tensione_r2(vin_p2, vout_p2, r1_p2)
+                    except ValueError as e:
+                        st.session_state["_cpas_part_result2"] = None
+                        st.error(str(e))
+                rr = st.session_state.get("_cpas_part_result2")
+                if rr:
+                    st.success(f"R2 = **{rr['r2_ohm']:,.1f} Ω** (corrente {rr['corrente_mA']:.3f} mA)".replace(",", "."))
+                    _export_csv_button("Componenti — Partitore (R2)", rr, key="cpas_part_export2")
+
+        elif sotto == "Costante di tempo RC/RL":
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                tipo_rc = st.radio("Circuito:", ["RC", "RL"], key="cpas_rc_tipo", horizontal=True)
+            with col2:
+                r_rc = st.number_input("Resistenza R [Ω]:", value=1000.0, min_value=0.01, key="cpas_rc_r")
+            with col3:
+                if tipo_rc == "RC":
+                    cl_rc = st.number_input("Capacità C [µF]:", value=1.0, min_value=0.000001, key="cpas_rc_c") * 1e-6
+                else:
+                    cl_rc = st.number_input("Induttanza L [mH]:", value=100.0, min_value=0.000001, key="cpas_rc_l") * 1e-3
+            pct_rc = st.slider("Percentuale del valore finale da raggiungere [%]:", 1, 99, 63, key="cpas_rc_pct")
+            if st.button("Calcola costante di tempo", key="cpas_rc_btn"):
+                try:
+                    st.session_state["_cpas_rc_result"] = cpas.costante_di_tempo(tipo_rc, r_rc, cl_rc, float(pct_rc))
+                except ValueError as e:
+                    st.session_state["_cpas_rc_result"] = None
+                    st.error(str(e))
+            rr = st.session_state.get("_cpas_rc_result")
+            if rr:
+                st.success(f"τ = **{rr['tau_s']*1000:.4g} ms** — tempo per il {pct_rc}%: **{rr['tempo_target_s']*1000:.4g} ms** "
+                           f"(a 5τ = {rr['tempo_5tau_s']*1000:.4g} ms si raggiunge il {rr['percentuale_a_5tau']:.2f}%, "
+                           "convenzionalmente il regime permanente)")
+                _export_csv_button("Componenti — Costante di tempo", rr, key="cpas_rc_export")
+
+        elif sotto == "Ponte di Wheatstone":
+            st.caption("Condizione di equilibrio (nessuna corrente nel galvanometro): R1·Rx = R2·R3 → Rx = R2·R3 / R1")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                r1_w = st.number_input("R1 (braccio in serie a Rx) [Ω]:", value=100.0, min_value=0.01, key="cpas_wh_r1")
+            with col2:
+                r2_w = st.number_input("R2 (braccio di rapporto) [Ω]:", value=200.0, min_value=0.01, key="cpas_wh_r2")
+            with col3:
+                r3_w = st.number_input("R3 (braccio di rapporto) [Ω]:", value=150.0, min_value=0.01, key="cpas_wh_r3")
+            if st.button("Calcola Rx", key="cpas_wh_btn"):
+                try:
+                    st.session_state["_cpas_wh_result"] = cpas.wheatstone_resistenza_incognita(r1_w, r2_w, r3_w)
+                except ValueError as e:
+                    st.session_state["_cpas_wh_result"] = None
+                    st.error(str(e))
+            rr = st.session_state.get("_cpas_wh_result")
+            if rr:
+                st.success(f"Rx = **{rr['rx_ohm']:,.2f} Ω**".replace(",", "."))
+                _export_csv_button("Componenti — Wheatstone", rr, key="cpas_wh_export")
+
+        elif sotto == "Convertitore AWG ↔ mm²":
+            verso_awg = st.radio("Calcola:", ["AWG → mm²", "mm² → AWG"], key="cpas_awg_verso", horizontal=True)
+            if verso_awg == "AWG → mm²":
+                awg_val = st.number_input("Calibro AWG:", value=24.0, min_value=-3.0, max_value=40.0, step=1.0, key="cpas_awg_val",
+                                          help="AWG 0000=-3, 000=-2, 00=-1, 0=0, poi 1, 2, 3... (numeri più alti = fili più sottili).")
+                if st.button("Converti", key="cpas_awg_btn"):
+                    try:
+                        st.session_state["_cpas_awg_result"] = cpas.awg_a_mm2(awg_val)
+                    except ValueError as e:
+                        st.session_state["_cpas_awg_result"] = None
+                        st.error(str(e))
+                rr = st.session_state.get("_cpas_awg_result")
+                if rr:
+                    st.success(f"AWG {rr['awg']:g} = **{rr['diametro_mm']:.4g} mm** ⌀ = **{rr['area_mm2']:.4g} mm²**")
+                    _export_csv_button("Componenti — AWG→mm²", rr, key="cpas_awg_export")
+            else:
+                area_val = st.number_input("Sezione [mm²]:", value=2.5, min_value=0.001, key="cpas_awg_area")
+                if st.button("Converti", key="cpas_awg_btn2"):
+                    try:
+                        st.session_state["_cpas_awg_result2"] = cpas.mm2_a_awg(area_val)
+                    except ValueError as e:
+                        st.session_state["_cpas_awg_result2"] = None
+                        st.error(str(e))
+                rr = st.session_state.get("_cpas_awg_result2")
+                if rr:
+                    st.success(f"{rr['area_mm2']:g} mm² ≈ **AWG {rr['awg_piu_vicino']}** (⌀ {rr['diametro_mm']:.4g} mm, "
+                               f"AWG esatto {rr['awg_esatto']:.2f})")
+                    _export_csv_button("Componenti — mm²→AWG", rr, key="cpas_awg_export2")
+
+        elif sotto == "Filtro RC/RL — Frequenza di taglio":
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                tipo_filtro = st.radio("Circuito:", ["RC", "RL"], key="cpas_filt_tipo", horizontal=True)
+            with col2:
+                r_filtro = st.number_input("Resistenza R [Ω]:", value=1000.0, min_value=0.01, key="cpas_filt_r")
+            with col3:
+                if tipo_filtro == "RC":
+                    cl_filtro = st.number_input("Capacità C [µF]:", value=1.0, min_value=0.000001, key="cpas_filt_c") * 1e-6
+                else:
+                    cl_filtro = st.number_input("Induttanza L [mH]:", value=100.0, min_value=0.000001, key="cpas_filt_l") * 1e-3
+            st.caption("La frequenza di taglio è la stessa sia in configurazione passa-basso che passa-alto: "
+                       "cambia solo su quale componente si preleva l'uscita.")
+            if st.button("Calcola frequenza di taglio", key="cpas_filt_btn"):
+                try:
+                    st.session_state["_cpas_filt_result"] = cpas.frequenza_taglio_rc_rl(tipo_filtro, r_filtro, cl_filtro)
+                except ValueError as e:
+                    st.session_state["_cpas_filt_result"] = None
+                    st.error(str(e))
+            rr = st.session_state.get("_cpas_filt_result")
+            if rr:
+                st.success(f"fc = **{rr['fc_Hz']:,.4g} Hz** (ω = {rr['omega_rad_s']:,.4g} rad/s)".replace(",", "."))
+                _export_csv_button("Componenti — Filtro RC/RL", rr, key="cpas_filt_export")
+
+        elif sotto == "Amplificatore operazionale — Guadagno":
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                config_opamp = st.radio("Configurazione:", ["Invertente", "Non invertente"], key="cpas_opamp_config")
+            with col2:
+                r1_opamp = st.number_input("R1 [Ω]:", value=1000.0, min_value=0.01, key="cpas_opamp_r1")
+            with col3:
+                r2_opamp = st.number_input("R2 (reazione) [Ω]:", value=10000.0, min_value=0.01, key="cpas_opamp_r2")
+            if st.button("Calcola guadagno", key="cpas_opamp_btn"):
+                try:
+                    st.session_state["_cpas_opamp_result"] = cpas.guadagno_op_amp(config_opamp, r1_opamp, r2_opamp)
+                except ValueError as e:
+                    st.session_state["_cpas_opamp_result"] = None
+                    st.error(str(e))
+            rr = st.session_state.get("_cpas_opamp_result")
+            if rr:
+                st.success(f"Guadagno Av = **{rr['guadagno']:.4g}** ({rr['guadagno_dB']:+.2f} dB)")
+                _export_csv_button("Componenti — Guadagno OpAmp", rr, key="cpas_opamp_export")
+
+        else:  # Diodo Zener — Regolatore shunt
+            col1, col2 = st.columns(2)
+            with col1:
+                vin_z = st.number_input("Tensione alimentazione Vin [V]:", value=12.0, min_value=0.1, key="cpas_z_vin")
+                vz_z = st.number_input("Tensione zener Vz [V]:", value=5.1, min_value=0.1, key="cpas_z_vz")
+            with col2:
+                rs_z = st.number_input("Resistenza serie [Ω]:", value=220.0, min_value=0.01, key="cpas_z_rs")
+                rc_z = st.number_input("Resistenza di carico [Ω]:", value=1000.0, min_value=0.01, key="cpas_z_rc")
+            if st.button("Calcola regolatore", key="cpas_z_btn"):
+                try:
+                    st.session_state["_cpas_z_result"] = cpas.diodo_zener_regolatore(vin_z, vz_z, rs_z, rc_z)
+                except ValueError as e:
+                    st.session_state["_cpas_z_result"] = None
+                    st.error(str(e))
+            rr = st.session_state.get("_cpas_z_result")
+            if rr:
+                if rr["regolazione_ok"]:
+                    st.success(f"Regolazione OK — I_zener = **{rr['i_zener_mA']:.2f} mA** "
+                               f"(P_zener = {rr['p_zener_W']:.3f} W), I_carico = {rr['i_carico_mA']:.2f} mA")
+                else:
+                    st.error(f"⚠️ Il regolatore NON riesce a stabilizzare: I_zener risulterebbe negativa "
+                             f"({rr['i_zener_mA']:.2f} mA). Riduci la resistenza serie o la resistenza di carico.")
+                _export_csv_button("Componenti — Zener", rr, key="cpas_z_export")
+
     elif tipo == "Corrente di Cortocircuito (Icc)":
         st.subheader("Stima Icc presunta in fondo linea (metodo semplificato IEC 60909)")
         st.caption("Utile per verificare il potere di interruzione degli interruttori.")
@@ -1585,9 +2263,17 @@ elif categoria == "⚡  Calcoli Elettrici":
         with col1:
             fasi_cc = st.selectbox("Sistema:", ["Trifase", "Monofase"], key="icc_fasi")
             v_cc = st.number_input("Tensione nominale [V]:", value=400.0 if fasi_cc == "Trifase" else 230.0, key="icc_v")
-            trafo_kva = st.number_input("Potenza trasformatore [kVA]:", value=400.0, min_value=1.0, key="icc_kva")
+            _warn_range(v_cc, 100, 1000, "Tensione nominale BT", "V")
+            trafo_kva = st.number_input(
+                "Potenza trasformatore [kVA]:", value=400.0, min_value=1.0, key="icc_kva",
+                help="Potenza apparente nominale del trasformatore MT/BT a monte, da targa.",
+            )
         with col2:
-            vcc_pct = st.number_input("Vcc trasformatore [%] (tipico 4-6%):", value=4.0, min_value=1.0, max_value=20.0, key="icc_vcc")
+            vcc_pct = st.number_input(
+                "Vcc trasformatore [%] (tipico 4-6%):", value=4.0, min_value=1.0, max_value=20.0, key="icc_vcc",
+                help="Tensione di corto circuito percentuale da targa trasformatore: definisce "
+                     "l'impedenza interna e quindi il contributo del trasformatore alla Icc.",
+            )
             mat_cc = st.radio("Materiale cavo:", ["Rame", "Alluminio"], key="icc_mat")
         sez_cc = st.selectbox("Sezione cavo [mm2]:", SEZIONI_COMMERCIALI, key="icc_sez")
         lung_cc = st.number_input("Lunghezza linea [m]:", value=50.0, key="icc_lung")
@@ -1599,6 +2285,8 @@ elif categoria == "⚡  Calcoli Elettrici":
                 "c = 0.95 - Icc MINIMA (coordinamento protezioni)",
             ],
             key="icc_c",
+            help="IEC 60909: c=1.05 stima la Icc massima (verifica del potere di interruzione delle "
+                 "protezioni), c=0.95 la Icc minima (verifica del coordinamento/tempi di intervento).",
         )
         c_val = 1.05 if "1.05" in c_icc else 0.95
 
@@ -1634,8 +2322,15 @@ elif categoria == "⚡  Calcoli Elettrici":
         st.caption("Calcolo semplificato. Per progettazione formale usare IEC 60909 completo.")
 
     elif tipo == "Dimensionamento Protezioni":
-        ib = st.number_input("Corrente Ib [A]:", value=16.0, key="prot_ib")
-        j_dens = st.slider("Densita J [A/mm2]:", 1.0, 6.0, 4.0, step=0.5, key="prot_j")
+        ib = st.number_input(
+            "Corrente Ib [A]:", value=16.0, key="prot_ib",
+            help="Corrente di progetto del circuito: la protezione scelta deve avere In ≥ Ib (CEI 64-8).",
+        )
+        j_dens = st.slider(
+            "Densita J [A/mm2]:", 1.0, 6.0, 4.0, step=0.5, key="prot_j",
+            help="Densità di corrente di progetto per il dimensionamento di massima del cavo "
+                 "(non sostituisce la verifica di portata CEI-UNEL 35024/1); tipica 4-6 A/mm² in BT.",
+        )
         if st.button("Trova Soluzione", key="prot_btn"):
             try:
                 mag, cavo, t_sez = formule.calcola_sezione_protezione(ib, j_dens)
@@ -1658,7 +2353,9 @@ elif categoria == "⚡  Calcoli Elettrici":
         col1, col2, col3 = st.columns(3)
         with col1:
             V_lin  = st.number_input("Tensione di linea V_L [V]:", value=400.0, min_value=1.0, key="tf_Vl")
+            _warn_range(V_lin, 100, 1000, "Tensione di linea BT", "V")
             f_hz   = st.number_input("Frequenza [Hz]:", value=50.0, min_value=1.0, key="tf_f")
+            _warn_range(f_hz, 40, 70, "Frequenza", "Hz")
         with col2:
             cos_tf = st.number_input("cos φ:", value=0.85, min_value=0.01, max_value=1.0, key="tf_cos")
             tipo_carico = st.selectbox("Tipo carico:", ["Induttivo (ritardo)", "Capacitivo (anticipo)", "Resistivo puro"], key="tf_tipo")
@@ -2194,7 +2891,7 @@ elif categoria == "⚡  Calcoli Elettrici":
 
     elif tipo == "Batterie e UPS":
         st.subheader("Calcolo Batterie e UPS")
-        sub_bat = st.radio("Calcolo:", ["Autonomia batteria", "Dimensionamento banco", "Corrente di carica", "Correzione temperatura"], horizontal=True, key="bat_sub")
+        sub_bat = st.radio("Calcolo:", ["Autonomia batteria", "Dimensionamento banco", "Corrente di carica", "Correzione temperatura", "Curve di scarica Li-Ion"], horizontal=True, key="bat_sub")
         if sub_bat == "Autonomia batteria":
             col1, col2 = st.columns(2)
             with col1:
@@ -2269,7 +2966,7 @@ elif categoria == "⚡  Calcoli Elettrici":
                      "I_C10 [A]": f"{r['I_C10_A']:.1f}", "I_float [A]": f"{r['I_float_A']:.2f}"},
                     key="bat3_export",
                 )
-        else:
+        elif sub_bat == "Correzione temperatura":
             col1, col2 = st.columns(2)
             with col1:
                 C_T  = st.number_input("Capacità C [Ah]:", value=100.0, min_value=1.0, key="bat_TC")
@@ -2294,6 +2991,68 @@ elif categoria == "⚡  Calcoli Elettrici":
                      "C corretta [Ah]": f"{r['C_corretta_Ah']:.1f}", "Riduzione [%]": f"{r['riduzione_pct']:.1f}"},
                     key="bat4_export",
                 )
+
+        else:
+            st.caption(
+                "Modello empirico (tabella OCV vs SOC tipica per celle Li-Ion NMC/NCA a 25°C) con "
+                "caduta da resistenza interna e riduzione di capacità da legge di Peukert. "
+                "Utile per stime/confronti; per il dimensionamento finale fare riferimento al datasheet del costruttore."
+            )
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                C_nom_li = st.number_input("Capacità nominale cella/ramo [Ah]:", value=3.0, min_value=0.01, key="bli_C")
+                n_serie  = st.number_input("Celle in serie:", value=4, min_value=1, step=1, key="bli_ns")
+            with col2:
+                n_par    = st.number_input("Celle in parallelo:", value=1, min_value=1, step=1, key="bli_np")
+                R_int    = st.number_input("Resistenza interna per cella [Ω]:", value=0.02, min_value=0.0, step=0.005, format="%.3f", key="bli_rint")
+            with col3:
+                soc_fin  = st.number_input("SOC finale di cutoff [%]:", value=0.0, min_value=0.0, max_value=99.0, key="bli_socfin")
+                c_rates_str = st.text_input("C-rate da confrontare (separati da virgola):", value="0.2, 0.5, 1, 2", key="bli_crates")
+
+            if st.button("Genera Curve di Scarica", key="bli_btn"):
+                try:
+                    c_rates = [float(x.strip()) for x in c_rates_str.split(",") if x.strip()]
+                    curve = blit.confronto_c_rate(C_nom_li, c_rates, int(n_serie), int(n_par), R_int, soc_fin)
+                    st.session_state["_bli_result"] = {
+                        "C_nom_li": C_nom_li, "n_serie": int(n_serie), "n_par": int(n_par),
+                        "R_int": R_int, "soc_fin": soc_fin, "curve": curve,
+                    }
+                except (ValueError, ZeroDivisionError) as e:
+                    st.session_state["_bli_result"] = None
+                    st.error(str(e))
+
+            rr = st.session_state.get("_bli_result")
+            if rr:
+                curve = rr["curve"]
+                import pandas as pd
+                df_v = pd.DataFrame({
+                    f"{cr}C": pd.Series(c["tensione_pacco_V"], index=c["capacita_erogata_Ah"])
+                    for cr, c in curve.items()
+                })
+                st.markdown("**Tensione pacco [V] vs Capacità erogata [Ah]** (una curva per C-rate)")
+                st.line_chart(df_v)
+
+                righe_riepilogo = []
+                for cr, c in curve.items():
+                    righe_riepilogo.append({
+                        "C-rate": cr,
+                        "Autonomia [h]": c["t_autonomia_h"],
+                        "Capacità effettiva pacco [Ah]": c["C_eff_pacco_Ah"],
+                        "Corrente pacco [A]": c["I_pacco_A"],
+                        "V iniziale [V]": c["tensione_iniziale_V"],
+                        "V finale [V]": c["tensione_finale_V"],
+                    })
+                st.dataframe(pd.DataFrame(righe_riepilogo), hide_index=True, use_container_width=True)
+
+                v_nom_pacco = next(iter(curve.values()))["tensione_nominale_pacco_V"]
+                st.metric("Tensione nominale pacco (SOC 50%)", f"{v_nom_pacco:.1f} V")
+
+                dati_export = {"C nominale [Ah]": rr["C_nom_li"], "Celle serie": rr["n_serie"], "Celle parallelo": rr["n_par"],
+                               "R interna [Ω]": rr["R_int"], "SOC finale [%]": rr["soc_fin"]}
+                for cr, c in curve.items():
+                    dati_export[f"Autonomia a {cr}C [h]"] = round(c["t_autonomia_h"], 2)
+                    dati_export[f"V finale a {cr}C [V]"] = c["tensione_finale_V"]
+                _export_csv_button("Batterie Li-Ion — Curve di scarica", dati_export, key="bli_export")
 
     elif tipo == "Dissipatore Termico":
         st.subheader("Calcolo Dissipatore Termico (IEC 60747 / JEDEC)")
@@ -6462,10 +7221,22 @@ elif categoria == "🔒  Sicurezza & Utilities":
         if sub_pl == "Calcola PL da parametri":
             col1, col2 = st.columns(2)
             with col1:
-                MTTFd_pl = st.number_input("MTTFd canale [anni]:", value=30.0, min_value=0.1, max_value=100.0, key="pl_mttfd")
-                DCavg_pl = st.slider("DCavg [%]:", 0, 100, 90, key="pl_dc")
+                MTTFd_pl = st.number_input(
+                    "MTTFd canale [anni]:", value=30.0, min_value=0.1, max_value=100.0, key="pl_mttfd",
+                    help="Tempo medio al guasto pericoloso di un canale (EN ISO 13849-1, max 100 anni per "
+                         "canale). Si ricava dal B10d del componente (vedi tab 'MTTFd da B10d') o dal datasheet.",
+                )
+                DCavg_pl = st.slider(
+                    "DCavg [%]:", 0, 100, 90, key="pl_dc",
+                    help="Copertura diagnostica media del sistema (EN ISO 13849-1, Annex E): percentuale "
+                         "di guasti pericolosi rilevati dal sistema di diagnosi/monitoraggio.",
+                )
             with col2:
-                cat_pl = st.selectbox("Categoria architetturale:", ["B", "1", "2", "3", "4"], index=3, key="pl_cat")
+                cat_pl = st.selectbox(
+                    "Categoria architetturale:", ["B", "1", "2", "3", "4"], index=3, key="pl_cat",
+                    help="Categoria EN ISO 13849-1: B/1 = singolo canale, 2 = singolo canale con test "
+                         "periodico, 3/4 = ridondanza con (4: anche) rilevamento guasto singolo.",
+                )
             if st.button("Calcola PL", key="pl_btn1"):
                 try:
                     r = pl_iso.calcola_PL(MTTFd_pl, DCavg_pl, cat_pl)
@@ -6493,7 +7264,11 @@ elif categoria == "🔒  Sicurezza & Utilities":
         elif sub_pl == "MTTFd da B10d":
             col1, col2 = st.columns(2)
             with col1:
-                B10d_pl = st.number_input("B10d [cicli]:", value=2000000.0, min_value=1000.0, key="pl_B10d")
+                B10d_pl = st.number_input(
+                    "B10d [cicli]:", value=2000000.0, min_value=1000.0, key="pl_B10d",
+                    help="Numero di cicli dopo i quali il 10% dei componenti si guasta in modo "
+                         "pericoloso (dato del costruttore, tipico per componenti elettromeccanici/pneumatici).",
+                )
             with col2:
                 n_op = st.number_input("Operazioni/anno:", value=52000.0, min_value=1.0, key="pl_nop",
                                         help="Es. 1 op/giorno × 250gg = 250; 200op/giorno × 250gg = 50000")
@@ -6519,9 +7294,16 @@ elif categoria == "🔒  Sicurezza & Utilities":
         else:
             col1, col2 = st.columns(2)
             with col1:
-                PL_rag = st.selectbox("PL raggiunto:", ["a", "b", "c", "d", "e"], index=3, key="pl_rag")
+                PL_rag = st.selectbox(
+                    "PL raggiunto:", ["a", "b", "c", "d", "e"], index=3, key="pl_rag",
+                    help="Performance Level effettivamente ottenuto dalla funzione di sicurezza progettata.",
+                )
             with col2:
-                PLr_req = st.selectbox("PLr richiesto:", ["a", "b", "c", "d", "e"], index=3, key="pl_req")
+                PLr_req = st.selectbox(
+                    "PLr richiesto:", ["a", "b", "c", "d", "e"], index=3, key="pl_req",
+                    help="Performance Level richiesto (PLr), determinato dalla valutazione del rischio "
+                         "secondo EN ISO 13849-1 (grafico del rischio, Annex A).",
+                )
             if st.button("Verifica PLr", key="pl_btn3"):
                 try:
                     r = pl_iso.verifica_PLr(PL_rag, PLr_req)
@@ -6637,6 +7419,8 @@ elif categoria == "🎛️  Mark VI/VIe & ToolboxST":
             "Calcolo — Termocoppia (ITS-90)",
             "Calcolo — Diagnostica Loop 4–20 mA (NE43)",
             "Calcolo — Velocità / Sovravelocità Turbina",
+            "Checklist — Commissioning Mark VI/VIe",
+            "Calcolo — Loading Rete IONet",
         ],
         key="mv_tool",
     )
@@ -7042,7 +7826,7 @@ elif categoria == "🎛️  Mark VI/VIe & ToolboxST":
                 key="mvne43_export",
             )
 
-    else:  # Velocità / Sovravelocità Turbina
+    elif tool_mv == "Calcolo — Velocità / Sovravelocità Turbina":
         st.subheader("Velocità e sovravelocità turbina — schede PTUR/PPRO/PGEN")
         st.caption("Ruota fonica + pickup magnetico (MPU). Campo sensore 2 Hz – 20 kHz (GEH-6721G).")
         col1, col2 = st.columns(2)
@@ -7113,6 +7897,98 @@ elif categoria == "🎛️  Mark VI/VIe & ToolboxST":
                      "Velocità trip [rpm]": f"{r['rpm_trip']:.0f}", "Frequenza trip [Hz]": f"{r['freq_trip_hz']:.1f}"},
                     key="mvtrip_export",
                 )
+
+    elif tool_mv == "Checklist — Commissioning Mark VI/VIe":
+        st.subheader("Checklist di commissioning Mark VI/VIe")
+        st.caption("Sequenza didattica di buona pratica per il commissioning di un sistema di controllo turbina "
+                   "(verifiche pre-avviamento, I/O, ridondanza, protezioni, logica applicativa). Per la procedura "
+                   "di dettaglio dello specifico impianto fare riferimento alle istruzioni di progetto e a GEH-6721.")
+
+        _dd_chk = _load_device_data()
+        _stato_chk = _dd_chk["checklist_mv"]
+        flat_chk = mv.checklist_commissioning_flat()
+        n_totali = len(flat_chk)
+        n_fatte = sum(1 for v in flat_chk if _stato_chk.get(v["id"]))
+        st.progress(n_fatte / n_totali if n_totali else 0.0,
+                    text=f"{n_fatte} / {n_totali} voci completate ({n_fatte / n_totali * 100:.0f}%)" if n_totali else "")
+
+        col_chk1, col_chk2 = st.columns(2)
+        with col_chk1:
+            if st.button("☑️ Segna tutto", key="mv_chk_all"):
+                for v in flat_chk:
+                    _stato_chk[v["id"]] = True
+                _save_device_data(_dd_chk)
+                st.rerun()
+        with col_chk2:
+            if st.button("🔄 Azzera checklist", key="mv_chk_reset"):
+                _dd_chk["checklist_mv"] = {}
+                _save_device_data(_dd_chk)
+                st.rerun()
+
+        for blocco in mv.CHECKLIST_COMMISSIONING:
+            n_fase_tot = len(blocco["voci"])
+            n_fase_fatte = sum(1 for vi in range(n_fase_tot) if _stato_chk.get(f"{mv.CHECKLIST_COMMISSIONING.index(blocco)}_{vi}"))
+            with st.expander(f"{blocco['fase']} ({n_fase_fatte}/{n_fase_tot})", expanded=(n_fase_fatte < n_fase_tot)):
+                fi = mv.CHECKLIST_COMMISSIONING.index(blocco)
+                for vi, voce in enumerate(blocco["voci"]):
+                    vid = f"{fi}_{vi}"
+                    checked = st.checkbox(voce, value=_stato_chk.get(vid, False), key=f"mv_chk_{vid}")
+                    if checked != _stato_chk.get(vid, False):
+                        _stato_chk[vid] = checked
+                        _save_device_data(_dd_chk)
+
+        st.markdown("---")
+        dati_chk_export = {v["fase"]: ("✅ fatto" if _stato_chk.get(v["id"]) else "⬜ da fare") for v in flat_chk}
+        dati_chk_export["Avanzamento totale"] = f"{n_fatte}/{n_totali} ({n_fatte / n_totali * 100:.0f}%)" if n_totali else "-"
+        _export_csv_button("Mark VIe — Checklist Commissioning", dati_chk_export, key="mvchk_export")
+
+    elif tool_mv == "Calcolo — Loading Rete IONet":
+        st.subheader("Stima carico (loading) rete IONet")
+        st.caption("Modello didattico semplificato: traffico ciclico controllore ↔ pacchi I/O a ogni frame di "
+                   "scansione. Non riproduce il protocollo proprietario GE; utile per una stima di massima del "
+                   "margine di banda disponibile su una IONet Ethernet (tipicamente 100 Mbps).")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            n_pacchi_ion = st.number_input("Numero pacchi I/O sulla rete:", value=8, min_value=1, step=1, key="mv_ion_npacchi")
+            canali_ion = st.number_input("Canali medi per pacco:", value=16.0, min_value=1.0, step=1.0, key="mv_ion_canali")
+        with col2:
+            frame_ion = st.number_input("Frame rate scansione [Hz]:", value=100.0, min_value=1.0, key="mv_ion_frame",
+                                         help="Frequenza di scansione del controllore Mark VIe — tipicamente 100 Hz.")
+            banda_ion = st.number_input("Banda rete IONet [Mbps]:", value=mv.IONET_BANDA_TIPICA_MBPS, min_value=1.0, key="mv_ion_banda")
+        with col3:
+            over_ion = st.number_input("Overhead per datagramma [byte]:", value=float(mv.IONET_OVERHEAD_BYTE), min_value=0.0, key="mv_ion_over")
+            byte_can_ion = st.number_input("Byte utili per canale:", value=mv.IONET_BYTE_PER_CANALE, min_value=0.1, key="mv_ion_bytecan")
+
+        if st.button("Calcola Loading IONet", key="mv_ion_btn"):
+            try:
+                r = mv.loading_ionet(int(n_pacchi_ion), canali_ion, frame_ion, banda_ion, over_ion, byte_can_ion)
+                st.session_state["_mvion_result"] = {
+                    "n_pacchi": int(n_pacchi_ion), "canali": canali_ion, "frame": frame_ion, "banda": banda_ion, "res": r,
+                }
+            except ValueError as e:
+                st.session_state["_mvion_result"] = None
+                st.error(str(e))
+
+        rr = st.session_state.get("_mvion_result")
+        if rr:
+            r = rr["res"]
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Utilizzo banda", f"{r['utilizzo_pct']:.2f} %")
+            c2.metric("Bit rate totale", f"{r['bit_rate_totale_Mbps']:.3f} Mbps")
+            c3.metric("Max pacchi (margine consigliato)", f"{r['n_pacchi_max_raccomandato']}")
+            if r["entro_margine_raccomandato"]:
+                st.success(f"Entro il margine ingegneristico consigliato (≤ {r['margine_raccomandato_pct']:.0f}% di utilizzo).")
+            else:
+                st.warning(f"Sopra il margine ingegneristico consigliato (≤ {r['margine_raccomandato_pct']:.0f}% di utilizzo): "
+                           "valutare di distribuire i pacchi su più reti IONet o ridurre i canali per pacco.")
+            _export_csv_button(
+                "Mark VIe — Loading Rete IONet",
+                {"Pacchi I/O": rr["n_pacchi"], "Canali medi/pacco": rr["canali"], "Frame rate [Hz]": rr["frame"],
+                 "Banda rete [Mbps]": rr["banda"], "Utilizzo [%]": f"{r['utilizzo_pct']:.2f}",
+                 "Bit rate totale [Mbps]": f"{r['bit_rate_totale_Mbps']:.3f}",
+                 "Max pacchi raccomandato": r["n_pacchi_max_raccomandato"]},
+                key="mvion_export",
+            )
 
 
 elif categoria == "📁  Progetti Salvati":
