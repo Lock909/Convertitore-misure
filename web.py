@@ -577,10 +577,11 @@ def _get_device_id() -> str:
         # ignorano i tag <script> inseriti cosi', quindi il cookie non verrebbe
         # mai impostato davvero. st.iframe con una stringa HTML renderizza un
         # iframe con un documento vero, dove lo script esegue ed eredita il
-        # cookie jar del dominio corrente.
+        # cookie jar del dominio corrente. height=0 non e' ammesso da st.iframe
+        # (StreamlitInvalidHeightError): 1 e' il minimo valido.
         st.iframe(
             f"<script>document.cookie='ti_device_id={cid}; max-age=31536000; path=/';</script>",
-            height=0,
+            height=1,
         )
     st.session_state["device_id"] = cid
     return cid
