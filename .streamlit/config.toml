@@ -1,0 +1,7 @@
+# Configurazione Streamlit del progetto.
+#
+# enableStaticServing: espone la cartella ./static agli URL /app/static/...
+# — usata per servire la versione offline/installabile (PWA) dallo stesso
+# server dell'app principale (link "Versione offline" nella sidebar).
+[server]
+enableStaticServing = true

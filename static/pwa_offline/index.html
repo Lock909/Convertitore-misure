@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calcolatore Industriale — Offline</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="theme-color" content="#0e1117">
+<link rel="stylesheet" href="style.css?v=50">
+</head>
+<body>
+<header>
+  <button id="btn-menu" class="header-btn btn-menu" type="button" aria-label="Apri menu calcolatori">☰</button>
+  <h1>⚡ Calcolatore Industriale</h1>
+  <div class="header-azioni">
+    <button id="btn-cronologia" class="header-btn" type="button">📜 Cronologia</button>
+    <button id="btn-progetti" class="header-btn" type="button">📁 Progetti</button>
+    <button id="btn-installa" class="header-btn" type="button" hidden>⬇️ Installa app</button>
+    <div id="stato-connessione" class="badge"></div>
+    <div id="stato-pyodide" class="badge badge-loading">Caricamento motore di calcolo…</div>
+  </div>
+</header>
+
+<div class="corpo-app">
+  <button id="overlay-menu" class="overlay-menu" type="button" aria-label="Chiudi menu"></button>
+  <aside id="barra-laterale">
+    <div class="barra-ricerca">
+      <button id="btn-chiudi-menu" class="btn-chiudi-menu" type="button" aria-label="Chiudi menu">✕</button>
+      <input type="search" id="ricerca-calcolatori" placeholder="🔎 Cerca un calcolo…" autocomplete="off">
+    </div>
+    <nav id="nav-calcolatori"></nav>
+  </aside>
+  <main id="contenuto-calcolatore">
+    <p class="placeholder">Seleziona un calcolo dal menu a sinistra.</p>
+  </main>
+</div>
+
+<footer>
+  <p>App offline — funziona senza connessione dopo il primo caricamento. I calcoli vengono eseguiti localmente nel browser (Python via Pyodide), nessun dato lascia il dispositivo.</p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script src="calcolatori.js?v=50"></script>
+<script src="storage.js?v=50"></script>
+<script src="app.js?v=50"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "favorites": [],
+  "history": [
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Componenti Passivi (Resistori, Condensatori, Induttori)",
+      "nome": "Componenti Passivi (Resistori, Condensatori, Induttori)",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    },
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Legge di Ohm",
+      "nome": "Legge di Ohm",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    }
+  ],
+  "projects": {},
+  "settings": {},
+  "checklist_mv": {}
+}

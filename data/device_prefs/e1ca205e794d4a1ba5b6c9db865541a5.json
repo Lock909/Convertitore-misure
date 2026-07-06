@@ -1,0 +1,24 @@
+{
+  "favorites": [],
+  "history": [
+    {
+      "fk": "🤖  PLC e Automazione||plc_tool||Info CPU e Memoria RX3i",
+      "nome": "Info CPU e Memoria RX3i",
+      "sezione": "🤖  PLC e Automazione",
+      "sel_key": "plc_tool"
+    },
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Legge di Ohm",
+      "nome": "Legge di Ohm",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    },
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Grado di Protezione IP (IEC 60529)",
+      "nome": "Grado di Protezione IP (IEC 60529)",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    }
+  ],
+  "projects": {}
+}

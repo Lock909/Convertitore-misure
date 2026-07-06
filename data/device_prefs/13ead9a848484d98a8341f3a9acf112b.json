@@ -1,0 +1,58 @@
+{
+  "favorites": [],
+  "history": [
+    {
+      "fk": "🎛️  Mark VI/VIe & ToolboxST||mv_tool||Calcolo — Loading Rete IONet",
+      "nome": "Calcolo — Loading Rete IONet",
+      "sezione": "🎛️  Mark VI/VIe & ToolboxST",
+      "sel_key": "mv_tool"
+    },
+    {
+      "fk": "🎛️  Mark VI/VIe & ToolboxST||mv_tool||Checklist — Commissioning Mark VI/VIe",
+      "nome": "Checklist — Commissioning Mark VI/VIe",
+      "sezione": "🎛️  Mark VI/VIe & ToolboxST",
+      "sel_key": "mv_tool"
+    },
+    {
+      "fk": "🎛️  Mark VI/VIe & ToolboxST||mv_tool||Riferimento — Schede I/O",
+      "nome": "Riferimento — Schede I/O",
+      "sezione": "🎛️  Mark VI/VIe & ToolboxST",
+      "sel_key": "mv_tool"
+    },
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Legge di Ohm",
+      "nome": "Legge di Ohm",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    },
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Caduta di Tensione",
+      "nome": "Caduta di Tensione",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    },
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Batterie e UPS",
+      "nome": "Batterie e UPS",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    },
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Caduta di Tensione — Confronto A/B",
+      "nome": "Caduta di Tensione — Confronto A/B",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    },
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Dimensionamento Cavi in Batch (tabella/CSV)",
+      "nome": "Dimensionamento Cavi in Batch (tabella/CSV)",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    }
+  ],
+  "projects": {},
+  "settings": {
+    "schermo_grande": true
+  },
+  "checklist_mv": {}
+}

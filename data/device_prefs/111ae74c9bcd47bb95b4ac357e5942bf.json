@@ -1,0 +1,34 @@
+{
+  "favorites": [],
+  "history": [
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Componenti Passivi (Resistori, Condensatori, Induttori)",
+      "nome": "Componenti Passivi (Resistori, Condensatori, Induttori)",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    },
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Legge di Ohm",
+      "nome": "Legge di Ohm",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    },
+    {
+      "fk": "🔒  Sicurezza & Utilities||sic_tool||Rumore — Somma Sorgenti",
+      "nome": "Rumore — Somma Sorgenti",
+      "sezione": "🔒  Sicurezza & Utilities",
+      "sel_key": "sic_tool"
+    },
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Tabelle di Riferimento Rapido (cavi, colori, IP, IE)",
+      "nome": "Tabelle di Riferimento Rapido (cavi, colori, IP, IE)",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    }
+  ],
+  "projects": {},
+  "settings": {
+    "schermo_grande": false
+  },
+  "checklist_mv": {}
+}

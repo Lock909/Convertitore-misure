@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pwa-offline",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8766", "--directory", "static/pwa_offline"],
+      "port": 8766
+    },
+    {
+      "name": "streamlit-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "streamlit", "run", "web.py", "--server.headless", "true", "--server.port", "8765"],
+      "port": 8765
+    }
+  ]
+}

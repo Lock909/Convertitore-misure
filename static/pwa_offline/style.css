@@ -1,0 +1,548 @@
+:root {
+  --bg: #0e1117;
+  --bg-pannello: #161b22;
+  --bordo: #2d333b;
+  --testo: #e6edf3;
+  --testo-attenuato: #8b949e;
+  --accento: #4f8ef7;
+  --ok: #3fb950;
+  --errore: #f85149;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--testo);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.banner-aggiornamento {
+  background: var(--accento);
+  color: #fff;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+.banner-aggiornamento button {
+  background: #fff;
+  color: var(--accento);
+  border: none;
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--bordo);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+header h1 { font-size: 1.3rem; margin: 0; }
+
+.header-azioni {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.header-btn {
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  color: var(--testo);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.header-btn:hover { border-color: var(--accento); }
+
+.btn-menu {
+  display: none;
+  font-size: 1.15rem;
+  line-height: 1;
+  padding: 6px 10px;
+}
+
+.badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+.badge-loading { background: #3d4757; color: var(--testo-attenuato); }
+.badge-ok { background: rgba(63, 185, 80, 0.15); color: var(--ok); }
+.badge-errore { background: rgba(248, 81, 73, 0.15); color: var(--errore); }
+
+.corpo-app {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  position: relative;
+}
+
+.overlay-menu {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  border: none;
+  margin: 0;
+  padding: 0;
+  z-index: 150;
+  cursor: pointer;
+}
+
+aside#barra-laterale {
+  width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--bordo);
+  overflow-y: auto;
+}
+
+.barra-ricerca {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  padding: 14px 16px 8px 16px;
+  z-index: 2;
+}
+#ricerca-calcolatori {
+  width: 100%;
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  color: var(--testo);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+#ricerca-calcolatori:focus { outline: none; border-color: var(--accento); }
+
+.btn-chiudi-menu {
+  display: none;
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  color: var(--testo);
+  border-radius: 6px;
+  cursor: pointer;
+  z-index: 3;
+}
+
+nav#nav-calcolatori {
+  padding: 4px 10px 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-gruppo {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-titolo-gruppo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--testo-attenuato);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-family: inherit;
+  padding: 9px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+.nav-titolo-gruppo:hover { background: var(--bg-pannello); color: var(--testo); }
+.nav-titolo-freccia { width: 10px; font-size: 0.7rem; flex-shrink: 0; }
+.nav-titolo-testo { flex: 1; }
+.nav-titolo-conteggio {
+  background: var(--bg-pannello);
+  color: var(--testo-attenuato);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.72rem;
+  flex-shrink: 0;
+}
+
+.nav-lista-gruppo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0 10px 0;
+}
+/* Specificità maggiore di ".nav-lista-gruppo" da sola: senza questa regola
+   il "display: flex" qui sopra vince sempre sullo user-agent stylesheet
+   "[hidden] { display: none }", rendendo l'attributo hidden inefficace. */
+.nav-lista-gruppo[hidden] { display: none; }
+
+.nav-riga {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.nav-btn {
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  color: var(--testo);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  flex: 1;
+  text-align: left;
+}
+.nav-btn:hover { border-color: var(--accento); }
+.nav-btn.attivo { background: var(--accento); color: #fff; border-color: var(--accento); }
+
+.nav-star {
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  color: var(--testo-attenuato);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  width: 32px;
+  flex-shrink: 0;
+}
+.nav-star:hover { border-color: #d29922; }
+.nav-star.attivo { color: #d29922; border-color: #d29922; }
+
+main#contenuto-calcolatore {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+main#contenuto-calcolatore > * {
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.placeholder { color: var(--testo-attenuato); }
+
+.nota-calcolatore {
+  color: var(--testo-attenuato);
+  font-size: 0.82rem;
+  margin-top: -4px;
+  margin-bottom: 14px;
+}
+
+#form-calc {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.campo { display: flex; flex-direction: column; gap: 4px; }
+.campo label { font-size: 0.85rem; color: var(--testo-attenuato); }
+.campo input, .campo select, .campo textarea {
+  background: var(--bg);
+  border: 1px solid var(--bordo);
+  color: var(--testo);
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  resize: vertical;
+}
+.campo input[type="checkbox"] { width: 18px; height: 18px; align-self: flex-start; }
+.nota-campo { color: var(--testo-attenuato); font-size: 0.75rem; }
+.avviso-range { color: #d29922; font-size: 0.78rem; }
+.campo-nota { margin-top: 14px; }
+
+.lista-valori-contenitore {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.lista-valori-riga {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.lista-valori-riga .valore-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--bordo);
+  color: var(--testo);
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+.azione-btn-piccolo {
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  color: var(--testo);
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.azione-btn-piccolo:hover { border-color: var(--errore); }
+
+.btn-calcola {
+  margin-top: 6px;
+  background: var(--accento);
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.btn-calcola:hover { opacity: 0.9; }
+
+#risultati { margin-top: 16px; }
+
+.tabella-risultati {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.tabella-risultati td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--bordo);
+}
+.tabella-risultati tr:last-child td { border-bottom: none; }
+.tabella-risultati td:first-child { color: var(--testo-attenuato); }
+.tabella-risultati td:last-child { text-align: right; font-weight: 600; }
+
+p.errore {
+  background: rgba(248, 81, 73, 0.12);
+  border: 1px solid var(--errore);
+  color: var(--errore);
+  padding: 10px 14px;
+  border-radius: 6px;
+}
+
+.barra-azioni {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.azione-btn {
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  color: var(--testo);
+  padding: 7px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.azione-btn:hover { border-color: var(--accento); }
+
+.lista-voci {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.card-voce {
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.card-voce-intestazione {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.card-voce-intestazione span { color: var(--testo-attenuato); font-size: 0.8rem; }
+
+.card-voce-dettaglio {
+  color: var(--testo-attenuato);
+  font-size: 0.82rem;
+  margin: 8px 0;
+  word-break: break-word;
+}
+
+.card-voce-nota {
+  color: var(--testo);
+  font-size: 0.82rem;
+  margin: 0 0 10px 0;
+  font-style: italic;
+  word-break: break-word;
+}
+
+.progetto-sezione {
+  margin-bottom: 26px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--bordo);
+}
+
+.progetto-intestazione {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.progetto-intestazione h3 { margin: 0; }
+
+.btn-toggle-confronto { margin-bottom: 14px; }
+
+.conversione-riga-unita {
+  display: flex;
+  gap: 12px;
+}
+.conversione-riga-unita .campo { flex: 1; min-width: 0; }
+
+.conversione-esito {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--accento);
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin: 6px 0 14px 0;
+  word-break: break-word;
+}
+
+.griglia-confronto {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 700px) {
+  .griglia-confronto { grid-template-columns: 1fr; }
+}
+
+.confronto-colonna {
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.confronto-colonna h3 { margin: 0 0 4px 0; color: var(--accento); font-size: 1rem; }
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accento);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  z-index: 1000;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.overlay-qr {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.box-qr {
+  background: #fff;
+  color: #111;
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.box-qr p { margin: 0; font-weight: 600; max-width: 240px; }
+
+.grafico-batteria {
+  width: 100%;
+  margin-top: 14px;
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+}
+.grafico-batteria .asse { stroke: var(--bordo); stroke-width: 1; }
+.grafico-batteria .curva { fill: none; stroke: var(--accento); stroke-width: 2; }
+.grafico-batteria .etichetta-asse { fill: var(--testo-attenuato); font-size: 11px; }
+
+footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--bordo);
+  color: var(--testo-attenuato);
+  font-size: 0.78rem;
+  flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------------------
+   Menu a scomparsa (drawer) su schermi stretti: la barra laterale con la
+   ricerca e le ~200 voci di menu diventa un pannello sovrapposto invece di
+   occupare la larghezza dello schermo, lasciando subito spazio al calcolo.
+   ------------------------------------------------------------------------ */
+@media (max-width: 900px) {
+  .btn-menu { display: inline-flex; align-items: center; justify-content: center; }
+  .btn-chiudi-menu { display: block; }
+
+  header h1 { font-size: 1.05rem; }
+
+  aside#barra-laterale {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(320px, 85vw);
+    z-index: 200;
+    background: var(--bg);
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
+  }
+  aside#barra-laterale.aperta { transform: translateX(0); }
+
+  .overlay-menu.visibile { display: block; }
+}

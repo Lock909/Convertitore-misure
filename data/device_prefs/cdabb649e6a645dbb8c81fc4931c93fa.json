@@ -1,0 +1,60 @@
+{
+  "favorites": [
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Legge di Ohm",
+      "nome": "Legge di Ohm",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    },
+    {
+      "fk": "〜  Vibrazioni||vib_tool||Conversione Grandezze Vibrazionali",
+      "nome": "Conversione Grandezze Vibrazionali",
+      "sezione": "〜  Vibrazioni",
+      "sel_key": "vib_tool"
+    },
+    {
+      "fk": "🤖  PLC e Automazione||plc_tool||Info CPU e Memoria RX3i",
+      "nome": "Info CPU e Memoria RX3i",
+      "sezione": "🤖  PLC e Automazione",
+      "sel_key": "plc_tool"
+    }
+  ],
+  "history": [
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Convertitore Potenze (kW / HP / kVA)",
+      "nome": "Convertitore Potenze (kW / HP / kVA)",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    },
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Analisi Potenze e Corrente",
+      "nome": "Analisi Potenze e Corrente",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    },
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Legge di Ohm",
+      "nome": "Legge di Ohm",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    },
+    {
+      "fk": "⚡  Calcoli Elettrici||elett_tipo||Carico Trifase Non Equilibrato",
+      "nome": "Carico Trifase Non Equilibrato",
+      "sezione": "⚡  Calcoli Elettrici",
+      "sel_key": "elett_tipo"
+    },
+    {
+      "fk": "🤖  PLC e Automazione||plc_tool||Info CPU e Memoria RX3i",
+      "nome": "Info CPU e Memoria RX3i",
+      "sezione": "🤖  PLC e Automazione",
+      "sel_key": "plc_tool"
+    },
+    {
+      "fk": "〜  Vibrazioni||vib_tool||Conversione Grandezze Vibrazionali",
+      "nome": "Conversione Grandezze Vibrazionali",
+      "sezione": "〜  Vibrazioni",
+      "sel_key": "vib_tool"
+    }
+  ]
+}
