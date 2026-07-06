@@ -799,7 +799,7 @@ with st.sidebar:
         _save_device_data(_dd_sidebar)
 
     st.markdown("---")
-    st.markdown("[📱 **Versione offline / installabile**](/app/static/pwa_offline/index.html)")
+    st.markdown("[📱 **Versione offline / installabile**](https://lock909.github.io/Convertitore-misure/)")
     st.caption(
         "Aprila una volta con connessione e installala: da lì in poi i calcoli "
         "funzionano anche senza internet. I progetti si scambiano con i pulsanti "
