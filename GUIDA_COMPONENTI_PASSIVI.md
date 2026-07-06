@@ -9,7 +9,7 @@ elettronici di base (LED, amplificatori operazionali, diodi zener).
 Il modulo esiste in **due copie identiche**, mantenute sincronizzate:
 
 - `componenti_passivi.py` — usato dall'app principale Streamlit (`web.py`)
-- `pwa_offline/py/componenti_passivi.py` — usato dalla PWA offline tramite Pyodide (via `pwa_offline/py/bridge.py`)
+- `static/pwa_offline/py/componenti_passivi.py` — usato dalla PWA offline tramite Pyodide (via `static/pwa_offline/py/bridge.py`)
 
 Dopo ogni modifica a uno dei due file, esegui dalla root del progetto:
 
@@ -243,11 +243,11 @@ cp.decodifica_smd_eia96("68C")      # {'valore_ohm': 499.0, 'mantissa_e96': 4.99
 ## Come sono esposte nell'app
 
 - **Streamlit (`web.py`)**: sezione *Calcoli Elettrici → Componenti Passivi*, con un `st.radio` che seleziona la sotto-modalità (una per ciascun gruppo sopra).
-- **PWA offline (`pwa_offline/`)**: ogni funzione ha un adattatore JSON-friendly in `pwa_offline/py/bridge.py` (stesso nome, parametri convertiti a stringa/float) e una voce dichiarativa in `pwa_offline/calcolatori.js` (categoria "Componenti") che genera automaticamente il form.
+- **PWA offline (`static/pwa_offline/`)**: ogni funzione ha un adattatore JSON-friendly in `static/pwa_offline/py/bridge.py` (stesso nome, parametri convertiti a stringa/float) e una voce dichiarativa in `static/pwa_offline/calcolatori.js` (categoria "Componenti") che genera automaticamente il form.
 
 Per aggiungere una nuova funzione di calcolo in futuro:
 1. Scrivila in `componenti_passivi.py` (root) seguendo lo stile esistente (dict in ingresso/uscita, `ValueError` per input non validi).
-2. Copiala in `pwa_offline/py/componenti_passivi.py` (o esegui `cp componenti_passivi.py pwa_offline/py/componenti_passivi.py`).
+2. Copiala in `static/pwa_offline/py/componenti_passivi.py` (o esegui `cp componenti_passivi.py static/pwa_offline/py/componenti_passivi.py`).
 3. Esegui `python verifica_sync_offline.py` per confermare che i due file siano identici.
-4. Aggiungi la funzione UI in `web.py` (sezione Componenti Passivi) e la funzione bridge + voce in `pwa_offline/py/bridge.py` / `pwa_offline/calcolatori.js`.
-5. Aggiungi i test in `test_calcoli.py` (classe `TestComponentiPassivi`) e, se vuoi coprire anche il percorso Pyodide, un caso in `pwa_offline/test.js` (visibile con `?test=1`).
+4. Aggiungi la funzione UI in `web.py` (sezione Componenti Passivi) e la funzione bridge + voce in `static/pwa_offline/py/bridge.py` / `static/pwa_offline/calcolatori.js`.
+5. Aggiungi i test in `test_calcoli.py` (classe `TestComponentiPassivi`) e, se vuoi coprire anche il percorso Pyodide, un caso in `static/pwa_offline/test.js` (visibile con `?test=1`).

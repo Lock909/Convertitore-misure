@@ -1,6 +1,6 @@
 # ==============================================================================
 # verifica_sync_offline.py — Confronta i moduli Python duplicati tra la root
-# del progetto e pwa_offline/py/, per rilevare divergenze accidentali quando
+# del progetto e static/pwa_offline/py/, per rilevare divergenze accidentali quando
 # si modifica un modulo su un solo lato (es. si aggiorna formule.py ma ci si
 # dimentica di ricopiarlo nella cartella della PWA offline).
 #
@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 RADICE = Path(__file__).parent
-CARTELLA_OFFLINE = RADICE / "pwa_offline" / "py"
+CARTELLA_OFFLINE = RADICE / "static" / "pwa_offline" / "py"
 
 MODULI_DUPLICATI = [
     "costanti.py",
@@ -30,6 +30,48 @@ MODULI_DUPLICATI = [
     "canaline_passerelle.py",
     "riferimento_rapido.py",
     "componenti_passivi.py",
+    "trasformatore.py",
+    "circuito_rlc.py",
+    "armonie_thd.py",
+    "batterie_ups.py",
+    "impianto_terra.py",
+    "selettivita_protezioni.py",
+    "fotovoltaico.py",
+    "gruppo_elettrogeno.py",
+    "quadro_elettrico.py",
+    "rifasamento_condensatori.py",
+    "caduta_tensione_bt.py",
+    "avviamento_motore.py",
+    "dissipatore.py",
+    "illuminotecnica.py",
+    "libreria_cavi.py",
+    "batch_cavi.py",
+    "costi_energetici.py",
+    "vibrazioni.py",
+    "resistenza_materiali.py",
+    "bulloneria.py",
+    "cuscinetti.py",
+    "molle.py",
+    "ruote_dentate.py",
+    "alberi_torsione.py",
+    "saldature.py",
+    "trasmissioni.py",
+    "nastri_trasportatori.py",
+    "pompe.py",
+    "perdite_carico.py",
+    "perdite_carico_distribuite.py",
+    "scambiatori.py",
+    "isolamento_termico.py",
+    "condotte_hvac.py",
+    "serbatoi.py",
+    "valvole_controllo.py",
+    "tubazione_pressione.py",
+    "pneumatica.py",
+    "trasduttori_pressione.py",
+    "rumore_industriale.py",
+    "performance_level.py",
+    "automazione.py",
+    "idraulica.py",
 ]
 
 
@@ -45,7 +87,7 @@ def verifica() -> int:
             mancanti.append(f"{nome}: manca nella root del progetto ({percorso_radice})")
             continue
         if not percorso_offline.exists():
-            mancanti.append(f"{nome}: manca in pwa_offline/py/ ({percorso_offline})")
+            mancanti.append(f"{nome}: manca in static/pwa_offline/py/ ({percorso_offline})")
             continue
 
         contenuto_radice = percorso_radice.read_text(encoding="utf-8")
@@ -54,7 +96,7 @@ def verifica() -> int:
             divergenze.append(nome)
 
     if not divergenze and not mancanti:
-        print(f"OK — {len(MODULI_DUPLICATI)} moduli sincronizzati tra root e pwa_offline/py/.")
+        print(f"OK — {len(MODULI_DUPLICATI)} moduli sincronizzati tra root e static/pwa_offline/py/.")
         return 0
 
     if mancanti:
@@ -62,12 +104,12 @@ def verifica() -> int:
         for m in mancanti:
             print(f"  - {m}")
     if divergenze:
-        print("Moduli DIVERGENTI (contenuto diverso tra root e pwa_offline/py/):")
+        print("Moduli DIVERGENTI (contenuto diverso tra root e static/pwa_offline/py/):")
         for d in divergenze:
             print(f"  - {d}")
         print("\nPer risincronizzare, copia il file aggiornato nell'altra posizione, es.:")
         for d in divergenze:
-            print(f"  cp \"{d}\" \"pwa_offline/py/{d}\"    # (o viceversa, a seconda di quale versione è quella corretta)")
+            print(f"  cp \"{d}\" \"static/pwa_offline/py/{d}\"    # (o viceversa, a seconda di quale versione è quella corretta)")
 
     return 1
 

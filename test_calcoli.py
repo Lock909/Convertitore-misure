@@ -53,6 +53,7 @@ import riferimento_rapido as rifr
 import batch_cavi
 import batterie_litio as blit
 import componenti_passivi as cpas
+import backup_compat
 
 
 class TestAutomazione(unittest.TestCase):
@@ -2308,6 +2309,93 @@ class TestComponentiPassivi(unittest.TestCase):
             cpas.decodifica_smd_eia96("99A")  # indice fuori range 1-96
         with self.assertRaises(ValueError):
             cpas.decodifica_smd_eia96("01Q")  # lettera non riconosciuta
+
+
+class TestBackupCompat(unittest.TestCase):
+    _PROGETTI_STREAMLIT = {
+        "Cantiere A": [
+            {"strumento": "Legge di Ohm", "timestamp": "2026-07-01 10:30:00",
+             "dati": {"Tensione [V]": 230, "Corrente [A]": 10, "Note": "quadro QE01"}},
+            {"strumento": "Caduta di Tensione", "timestamp": "2026-07-01 11:00:00",
+             "dati": {"Caduta [V]": 9.67}},
+        ],
+    }
+
+    def test_esporta_formato_pwa(self):
+        b = backup_compat.esporta_progetti_per_pwa(self._PROGETTI_STREAMLIT)
+        self.assertEqual(b["tipo"], "backup-calcolatore-industriale")
+        self.assertEqual(b["cronologia"], [])
+        voci = b["progetti"]["Cantiere A"]
+        self.assertEqual(len(voci), 2)
+        self.assertEqual(voci[0]["titolo"], "Legge di Ohm")
+        self.assertEqual(voci[0]["timestamp"], "2026-07-01T10:30:00")
+        self.assertEqual(voci[0]["nota"], "quadro QE01")
+        self.assertNotIn("Note", voci[0]["output"])  # la nota esce dai dati e diventa campo dedicato
+        self.assertNotIn("nota", voci[1])  # la voce senza nota non ha il campo
+
+    def test_esporta_id_deterministici(self):
+        b1 = backup_compat.esporta_progetti_per_pwa(self._PROGETTI_STREAMLIT)
+        b2 = backup_compat.esporta_progetti_per_pwa(self._PROGETTI_STREAMLIT)
+        ids1 = [v["id"] for v in b1["progetti"]["Cantiere A"]]
+        ids2 = [v["id"] for v in b2["progetti"]["Cantiere A"]]
+        self.assertEqual(ids1, ids2)
+        self.assertEqual(len(set(ids1)), 2)  # id distinti tra voci diverse
+
+    def test_importa_backup_pwa(self):
+        backup = {
+            "tipo": "backup-calcolatore-industriale", "versione": 1,
+            "progetti": {"Impianto B": [
+                {"id": "x1", "timestamp": "2026-07-02T09:15:00.000Z", "titolo": "Rifasamento",
+                 "input": {"p_attiva_kw": 100}, "output": {"qc_kvar": 55.32}, "nota": "da verificare"},
+            ]},
+        }
+        projects = {}
+        n = backup_compat.importa_backup_pwa(backup, projects)
+        self.assertEqual(n, 1)
+        voce = projects["Impianto B"][0]
+        self.assertEqual(voce["strumento"], "Rifasamento")
+        self.assertEqual(voce["timestamp"], "2026-07-02 09:15:00")
+        self.assertEqual(voce["dati"]["input.p_attiva_kw"], 100)
+        self.assertEqual(voce["dati"]["qc_kvar"], 55.32)
+        self.assertEqual(voce["dati"]["Note"], "da verificare")
+
+    def test_importa_non_duplica(self):
+        backup = {
+            "tipo": "backup-calcolatore-industriale",
+            "progetti": {"P": [{"id": "a", "timestamp": "2026-07-02T09:00:00", "titolo": "X",
+                                "input": {}, "output": {"v": 1}}]},
+        }
+        projects = {}
+        self.assertEqual(backup_compat.importa_backup_pwa(backup, projects), 1)
+        self.assertEqual(backup_compat.importa_backup_pwa(backup, projects), 0)  # secondo import: 0 aggiunte
+        self.assertEqual(len(projects["P"]), 1)
+
+    def test_importa_valori_annidati_come_json(self):
+        backup = {
+            "tipo": "backup-calcolatore-industriale",
+            "progetti": {"P": [{"id": "b", "timestamp": "2026-07-02T09:00:00", "titolo": "Batteria",
+                                "input": {}, "output": {"soc_pct": [100, 90, 80]}}]},
+        }
+        projects = {}
+        backup_compat.importa_backup_pwa(backup, projects)
+        self.assertEqual(projects["P"][0]["dati"]["soc_pct"], "[100, 90, 80]")
+
+    def test_importa_rifiuta_file_non_valido(self):
+        with self.assertRaises(ValueError):
+            backup_compat.importa_backup_pwa({"tipo": "altro"}, {})
+        with self.assertRaises(ValueError):
+            backup_compat.importa_backup_pwa("non un dict", {})
+
+    def test_round_trip_streamlit_pwa_streamlit(self):
+        b = backup_compat.esporta_progetti_per_pwa(self._PROGETTI_STREAMLIT)
+        projects = {}
+        n = backup_compat.importa_backup_pwa(b, projects)
+        self.assertEqual(n, 2)
+        voce = projects["Cantiere A"][0]
+        self.assertEqual(voce["strumento"], "Legge di Ohm")
+        self.assertEqual(voce["timestamp"], "2026-07-01 10:30:00")
+        self.assertEqual(voce["dati"]["Note"], "quadro QE01")
+        self.assertEqual(voce["dati"]["Tensione [V]"], 230)
 
     # ---- Filtro RC/RL — frequenza di taglio ----
 

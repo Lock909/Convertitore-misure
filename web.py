@@ -72,6 +72,7 @@ import canaline_passerelle as canp
 import batch_cavi
 import batterie_litio as blit
 import componenti_passivi as cpas
+import backup_compat
 from costanti import SEZIONI_COMMERCIALI, TENSIONE_MONOFASE, TENSIONE_TRIFASE
 
 
@@ -796,6 +797,14 @@ with st.sidebar:
     if _schermo_grande != _dd_sidebar["settings"].get("schermo_grande", False):
         _dd_sidebar["settings"]["schermo_grande"] = _schermo_grande
         _save_device_data(_dd_sidebar)
+
+    st.markdown("---")
+    st.markdown("[📱 **Versione offline / installabile**](/app/static/pwa_offline/index.html)")
+    st.caption(
+        "Aprila una volta con connessione e installala: da lì in poi i calcoli "
+        "funzionano anche senza internet. I progetti si scambiano con i pulsanti "
+        "di backup nella sezione Progetti Salvati."
+    )
 
     st.markdown("---")
     st.caption("v4.0 · CEI 64-8 · ISO 10816 · IEC 60034-30 · EN 12464-1")
@@ -8038,6 +8047,40 @@ elif categoria == "📁  Progetti Salvati":
         if st.button(f"🗑️ Elimina progetto '{nome_sel}'", key="proj_del_all"):
             _elimina_progetto(nome_sel)
             st.rerun()
+
+    st.markdown("---")
+    st.subheader("🔄 Scambio con la versione offline")
+    st.caption("Stesso file JSON in entrambe le direzioni: esporta da qui e importa nella versione "
+               "offline (vista Progetti → \"⬆️ Importa backup\"), o viceversa. Le voci già presenti "
+               "non vengono duplicate.")
+
+    col_bk1, col_bk2 = st.columns(2)
+    with col_bk1:
+        _backup_json = json.dumps(
+            backup_compat.esporta_progetti_per_pwa(_progetti),
+            ensure_ascii=False, indent=2,
+        )
+        st.download_button(
+            "⬇️ Esporta backup (per versione offline)",
+            data=_backup_json,
+            file_name=f"backup_calcolatore_{datetime.now().strftime('%Y-%m-%d')}.json",
+            mime="application/json",
+            key="proj_backup_export",
+            disabled=not _progetti,
+        )
+    with col_bk2:
+        _file_bk = st.file_uploader("⬆️ Importa backup (anche dalla versione offline):",
+                                    type=["json"], key="proj_backup_import")
+        if _file_bk is not None and st.button("Importa nel dispositivo", key="proj_backup_import_btn"):
+            try:
+                _backup = json.loads(_file_bk.getvalue().decode("utf-8"))
+                _n_agg = backup_compat.importa_backup_pwa(_backup, _dd_proj["projects"])
+                _save_device_data(_dd_proj)
+                st.success(f"Importate {_n_agg} voci nei progetti di questo dispositivo.")
+                if _n_agg:
+                    st.rerun()
+            except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as e:
+                st.error(f"Importazione non riuscita: {e}")
 
 st.markdown("---")
 st.caption("Disclaimer: strumento indicativo basato sulle norme tecniche CEI 64-8, ISO 10816, ISO 1940, ISO 1217, IEC 60751, NIST ITS-90. Non sostituisce la progettazione formale di un professionista abilitato.")
