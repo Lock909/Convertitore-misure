@@ -8,7 +8,6 @@ from datetime import datetime
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 try:
     import plotly.graph_objects as go
     _PLOTLY = True
@@ -576,10 +575,10 @@ def _get_device_id() -> str:
         cid = uuid.uuid4().hex
         # st.markdown(unsafe_allow_html=True) inietta via innerHTML: i browser
         # ignorano i tag <script> inseriti cosi', quindi il cookie non verrebbe
-        # mai impostato davvero. components.v1.html renderizza un iframe con un
-        # documento vero (srcdoc), dove lo script esegue ed eredita il cookie
-        # jar del dominio corrente.
-        components.html(
+        # mai impostato davvero. st.iframe con una stringa HTML renderizza un
+        # iframe con un documento vero, dove lo script esegue ed eredita il
+        # cookie jar del dominio corrente.
+        st.iframe(
             f"<script>document.cookie='ti_device_id={cid}; max-age=31536000; path=/';</script>",
             height=0,
         )
