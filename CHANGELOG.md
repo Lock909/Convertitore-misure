@@ -1,0 +1,135 @@
+# Changelog — Calcolatore Industriale (app Streamlit + PWA offline)
+
+Formato ispirato a [Keep a Changelog](https://keepachangelog.com/it/1.0.0/). Il numero di
+versione qui sotto corrisponde a `VERSIONE_APP` in `static/pwa_offline/app.js` (gestito da
+`bump_versione_pwa.py`), che è anche il tag Git della release (`vNN`).
+
+Le versioni precedenti alla v28 sono state sviluppate prima dell'adozione di Git in questo
+progetto: non hanno un tag corrispondente (nessun commit storico disponibile), ma sono
+documentate qui per completezza.
+
+## [v50] - 2026-07-06
+### Added
+- Convertitore di unità di misura generico (16 grandezze: pressione, portate, lunghezza,
+  superficie, volume, densità, forza, massa, coppia, energia, potenza, velocità,
+  accelerazione, angolo, temperatura), con vista dedicata a select dipendenti e tabella di
+  conversione simultanea in tutte le unità della categoria.
+
+## [v49] - 2026-07-06
+### Fixed
+- Bug CSS che rendeva inefficace l'attributo `hidden` sulle categorie collassate nel menu
+  (regola `.nav-lista-gruppo { display: flex }` aveva precedenza sullo user-agent stylesheet).
+
+## [v48] - 2026-07-06
+### Changed
+- Rifatta l'interfaccia della PWA: layout a due colonne (sidebar + contenuto) con scroll
+  indipendente, categorie del menu a fisarmonica (accordion, collassate di default tranne
+  quella attiva), menu a scomparsa (drawer) su mobile/tablet con overlay e pulsante hamburger.
+
+## [v47] - 2026-07-06
+### Added
+- Blocco Pneumatica/Strumenti + Sicurezza/PLC (5 moduli, 21 calcolatori): aria compressa,
+  trasduttori 4-20 mA, rumore industriale, Performance Level/SIL (EN ISO 13849-1), utility
+  PLC IEC 61131-3 (scalatura analogica, esplosione/composizione bit, indirizzi memoria RX3i).
+
+## [v46] - 2026-07-06
+### Added
+- `tubazione_pressione.py`: spessore minimo/pressione ammissibile tubazioni in pressione
+  (EN 13480-3). Chiude il blocco Termotecnica/Fluidi (9 moduli).
+
+## [v45] - 2026-07-06
+### Added
+- `valvole_controllo.py`: dimensionamento Cv/Kv liquidi e gas, verifica cavitazione (IEC 60534).
+
+## [v44] - 2026-07-06
+### Added
+- `serbatoi.py`: volumi geometrici, pressione idrostatica, portata di Torricelli, tempi di
+  svuotamento/riempimento.
+
+## [v43] - 2026-07-06
+### Added
+- `condotte_hvac.py`: proprietà aria, diametro idraulico, perdita di carico e
+  dimensionamento condotte circolari/rettangolari.
+
+## [v42] - 2026-07-06
+### Added
+- `isolamento_termico.py`: perdita termica parete piana multistrato e tubo cilindrico
+  coibentato, verifica rischio condensa (formula di Magnus).
+
+## [v41] - 2026-07-06
+### Added
+- `scambiatori.py`: bilancio termico, metodo LMTD, metodo NTU-ε.
+
+## [v40] - 2026-07-06
+### Added
+- `perdite_carico_distribuite.py`: Darcy-Weisbach, numero di Reynolds, fattore di attrito
+  di Swamee-Jain, diametro da velocità massima.
+
+## [v39] - 2026-07-06
+### Added
+- `perdite_carico.py`: perdite concentrate su raccordi/valvole (database Idel'chik),
+  lunghezza equivalente, allargamento/restringimento bruschi.
+
+## [v38] - 2026-07-06
+### Added
+- `pompe.py`: punto di lavoro pompa/impianto, potenza idraulica, NPSH disponibile, numero
+  specifico di giri.
+
+## [v37] - 2026-07-06
+### Added
+- `nastri_trasportatori.py`: portata di trasporto, potenza motore (ISO 5048), tensione
+  nastro, angolo massimo di inclinazione. Chiude il blocco Meccanica (10 moduli).
+
+## [v36] - 2026-07-06
+### Added
+- `trasmissioni.py`: stadio singolo e riduttore multistadio, geometria cinghia,
+  conversione potenza/coppia/velocità.
+
+## [v35] - 2026-07-06
+### Added
+- `saldature.py`: resistenza ammissibile cordone (EN 1993-1-8), gola minima, verifica a
+  taglio/carico normale, cordoni su flangia.
+
+## [v34] - 2026-07-06
+### Added
+- `alberi_torsione.py`: momento torcente, diametro minimo, tensioni combinate, fattore di
+  sicurezza statico, verifica a fatica (Goodman/Gerber).
+
+## [v33] - 2026-07-06
+### Added
+- `ruote_dentate.py`: geometria, modulo minimo ed equazione di Lewis, rapporto di
+  trasmissione.
+
+## [v32] - 2026-07-06
+### Added
+- `molle.py`: costante elastica compressione/trazione, tensione di taglio (fattore di
+  Wahl), frequenza naturale, molla di torsione.
+
+## [v31] - 2026-07-06
+### Added
+- `cuscinetti.py`: durata L10 (ISO 281), carico dinamico equivalente, fattore di durata
+  richiesta.
+
+## [v30] - 2026-07-06
+### Added
+- Blocco Meccanica sotto-blocco 1: `vibrazioni.py`, `resistenza_materiali.py`,
+  `bulloneria.py`.
+
+## [v29] - 2026-07-06
+### Added
+- Elettrico sotto-blocco 3: `avviamento_motore.py`, `dissipatore.py`,
+  `illuminotecnica.py`, `libreria_cavi.py`, `batch_cavi.py`, `costi_energetici.py`.
+  Chiude il blocco Elettrico (17 moduli).
+
+## [v1] - [v28] - fino al 2026-07-03
+Sviluppo iniziale, prima dell'adozione di Git (nessun tag disponibile).
+### Added
+- Scaffold PWA offline con motore Pyodide, service worker e cache per l'uso offline.
+- Moduli Elettrico sotto-blocchi 1-2 (trasformatore, RLC, THD, UPS, terra, selettività,
+  fotovoltaico, gruppo elettrogeno, quadro elettrico, rifasamento, caduta di tensione BT).
+- Riferimento rapido, canaline/passerelle, componenti passivi (con calcolatori LED,
+  partitore, RC/RL, Wheatstone, AWG, SMD, filtro, op-amp, zener).
+- Cronologia calcoli e progetti salvati (localStorage), esportazione (copia/CSV/PDF/QR),
+  ricerca e preferiti nel menu.
+- Backup/ripristino compatibile tra versione Streamlit e PWA offline.
+- Collegamento della PWA al server Streamlit tramite file statici.
