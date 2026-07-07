@@ -4,6 +4,13 @@
 // Confronta l'output reale di ciascuna funzione bridge con un valore atteso,
 // per individuare rapidamente regressioni quando si modifica bridge.py o i
 // moduli Python sottostanti.
+//
+// Include anche uno smoke test su TUTTI i calcolatori (CASI_TEST sopra copre
+// solo componenti_passivi con valori verificati a mano): chiama ciascuna
+// funzione bridge con i valori di default già dichiarati in calcolatori.js e
+// verifica solo che non sollevi eccezioni e non ritorni {"errore": ...} — non
+// verifica che il RISULTATO sia numericamente corretto, solo che il percorso
+// JS→Pyodide→Python non sia rotto (tipi di argomento, nomi di funzione, ecc.).
 // ==============================================================================
 
 function _vicino(a, b, tolleranza = 0.01) {
@@ -79,9 +86,55 @@ function eseguiTestSuite() {
   return risultati;
 }
 
+function valoreDefaultCampo(campo) {
+  if (campo.type === "lista_valori") return campo.defaultLista ? [...campo.defaultLista] : [];
+  if (campo.type === "select") return campo.default !== undefined ? campo.default : campo.opzioni[0];
+  if (campo.type === "checkbox") return !!campo.default;
+  return campo.default;
+}
+
+function costruisciKwargsDefault(calc) {
+  const kwargs = {};
+  for (const campo of calc.campi) kwargs[campo.name] = valoreDefaultCampo(campo);
+  return kwargs;
+}
+
+// Le viste "speciale" (conversione, batch_cavi) sono costruite a mano con più
+// funzioni bridge dipendenti tra loro (select a cascata, righe dinamiche): non
+// hanno un'unica funzione bridge chiamabile con i soli valori di default, quindi
+// restano fuori dallo smoke test automatico.
+function eseguiSmokeTestCalcolatori() {
+  const risultati = [];
+  for (const calc of CALCOLATORI) {
+    if (calc.speciale) continue;
+    const kwargs = costruisciKwargsDefault(calc);
+    let stato, dettaglio;
+    try {
+      const r = chiamaBridge(calc.bridge, kwargs);
+      if (r && r.errore) {
+        stato = "❌ FALLITO";
+        dettaglio = r.errore;
+      } else {
+        stato = "✅ OK";
+        dettaglio = "";
+      }
+    } catch (e) {
+      stato = "❌ FALLITO";
+      dettaglio = "ERRORE: " + e;
+    }
+    risultati.push({ id: calc.id, bridge: calc.bridge, stato, dettaglio });
+  }
+  return risultati;
+}
+
 function mostraTestSuite() {
   const main = document.getElementById("contenuto-calcolatore");
   main.innerHTML = "<h2>Suite di test bridge</h2>";
+
+  const sottotitolo1 = document.createElement("h3");
+  sottotitolo1.textContent = "Regressione con valore atteso (componenti_passivi)";
+  main.appendChild(sottotitolo1);
+
   const risultati = eseguiTestSuite();
   const tabella = document.createElement("table");
   tabella.className = "tabella-risultati";
@@ -97,4 +150,24 @@ function mostraTestSuite() {
     ? `Tutti i ${risultati.length} test sono passati.`
     : `${nFalliti} test falliti su ${risultati.length}.`;
   main.appendChild(riepilogo);
+
+  const sottotitolo2 = document.createElement("h3");
+  sottotitolo2.textContent = "Smoke test su tutti i calcolatori (solo assenza di errori)";
+  main.appendChild(sottotitolo2);
+
+  const risultatiSmoke = eseguiSmokeTestCalcolatori();
+  const tabellaSmoke = document.createElement("table");
+  tabellaSmoke.className = "tabella-risultati";
+  for (const r of risultatiSmoke) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${r.id} (${r.bridge})</td><td>${r.stato}${r.dettaglio ? " — " + r.dettaglio : ""}</td>`;
+    tabellaSmoke.appendChild(tr);
+  }
+  main.appendChild(tabellaSmoke);
+  const nFallitiSmoke = risultatiSmoke.filter(r => r.stato.includes("FALLITO")).length;
+  const riepilogoSmoke = document.createElement("p");
+  riepilogoSmoke.textContent = nFallitiSmoke === 0
+    ? `Tutti i ${risultatiSmoke.length} calcolatori rispondono senza errori con i valori di default.`
+    : `${nFallitiSmoke} calcolatori falliti su ${risultatiSmoke.length}.`;
+  main.appendChild(riepilogoSmoke);
 }

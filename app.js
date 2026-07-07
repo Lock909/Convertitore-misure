@@ -4,7 +4,7 @@
 // i form a partire da CALCOLATORI (calcolatori.js) e mostra i risultati.
 // ==============================================================================
 
-const VERSIONE_APP = "52";
+const VERSIONE_APP = "53";
 
 const FILE_PY = [
   "costanti.py", "formule.py", "portata_cavo.py", "batterie_litio.py",

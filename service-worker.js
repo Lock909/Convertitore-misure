@@ -4,8 +4,8 @@
 // una sola visita con connessione attiva.
 // ==============================================================================
 
-const CACHE_APP = "calc-industriale-app-v52";
-const CACHE_RUNTIME = "calc-industriale-runtime-v52";
+const CACHE_APP = "calc-industriale-app-v53";
+const CACHE_RUNTIME = "calc-industriale-runtime-v53";
 
 // Nota: niente "./" in questa lista — il server Streamlit (/app/static/...) non
 // serve l'indice di directory e un singolo 404 farebbe fallire l'intero addAll.
