@@ -4,7 +4,7 @@
 // i form a partire da CALCOLATORI (calcolatori.js) e mostra i risultati.
 // ==============================================================================
 
-const VERSIONE_APP = "50";
+const VERSIONE_APP = "51";
 
 const FILE_PY = [
   "costanti.py", "formule.py", "portata_cavo.py", "batterie_litio.py",
@@ -476,6 +476,8 @@ function renderFormConfronto(calc, main) {
           pannello.appendChild(renderTabellaDict(risultato));
         } else if (calc.risultati === "batteria") {
           pannello.appendChild(renderBatteria(risultato));
+        } else if (calc.risultati === "derating") {
+          pannello.appendChild(renderDerating(risultato));
         } else {
           pannello.appendChild(renderTabellaCampi(risultato, calc.risultati));
         }
@@ -656,6 +658,8 @@ function eseguiCalcolo(calc, form) {
     divRisultati.appendChild(renderTabellaDict(risultato));
   } else if (calc.risultati === "batteria") {
     divRisultati.appendChild(renderBatteria(risultato));
+  } else if (calc.risultati === "derating") {
+    divRisultati.appendChild(renderDerating(risultato));
   } else {
     divRisultati.appendChild(renderTabellaCampi(risultato, calc.risultati));
   }
@@ -893,6 +897,13 @@ function renderBatteria(risultato) {
   contenitore.appendChild(grafico_svg(risultato.capacita_erogata_Ah, risultato.tensione_pacco_V,
     "Capacità erogata [Ah]", "Tensione pacco [V]"));
 
+  return contenitore;
+}
+
+function renderDerating(risultato) {
+  const contenitore = document.createElement("div");
+  contenitore.appendChild(grafico_svg(risultato.T_amb_C, risultato.P_max_W,
+    "T ambiente [°C]", "P massima [W]"));
   return contenitore;
 }
 
