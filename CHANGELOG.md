@@ -8,6 +8,13 @@ Le versioni precedenti alla v28 sono state sviluppate prima dell'adozione di Git
 progetto: non hanno un tag corrispondente (nessun commit storico disponibile), ma sono
 documentate qui per completezza.
 
+## [v53] - 2026-07-07
+### Added
+- Smoke test automatico (`test.js`, attivabile con `?test=1`) su tutti i 201 calcolatori con
+  bridge diretto: chiama ciascuna funzione con i valori di default di `calcolatori.js` e
+  verifica solo l'assenza di eccezioni/errori (non il valore numerico). Prima la suite di test
+  copriva solo i 33 casi con valore atteso verificato a mano di componenti_passivi.
+
 ## [v52] - 2026-07-07
 ### Added
 - Dimensionamento Cavi in Batch (tabella) nella PWA offline: righe dinamiche
