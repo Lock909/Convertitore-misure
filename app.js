@@ -4,7 +4,7 @@
 // i form a partire da CALCOLATORI (calcolatori.js) e mostra i risultati.
 // ==============================================================================
 
-const VERSIONE_APP = "53";
+const VERSIONE_APP = "54";
 
 const FILE_PY = [
   "costanti.py", "formule.py", "portata_cavo.py", "batterie_litio.py",
@@ -39,11 +39,11 @@ async function avviaPyodide() {
   badge.textContent = "⏳ Caricamento numpy…";
   await pyodide.loadPackage("numpy");
 
-  for (const nome of FILE_PY) {
-    const risposta = await fetch(`py/${nome}?v=${VERSIONE_APP}`, { cache: "no-cache" });
-    const testo = await risposta.text();
-    pyodide.FS.writeFile(`/home/pyodide/${nome}`, testo);
-  }
+  badge.textContent = "⏳ Caricamento moduli di calcolo…";
+  const contenutiFile = await Promise.all(
+    FILE_PY.map(nome => fetch(`py/${nome}?v=${VERSIONE_APP}`, { cache: "no-cache" }).then(r => r.text()))
+  );
+  FILE_PY.forEach((nome, i) => pyodide.FS.writeFile(`/home/pyodide/${nome}`, contenutiFile[i]));
 
   pyodide.runPython(`
 import sys
