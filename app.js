@@ -4,7 +4,7 @@
 // i form a partire da CALCOLATORI (calcolatori.js) e mostra i risultati.
 // ==============================================================================
 
-const VERSIONE_APP = "54";
+const VERSIONE_APP = "55";
 
 const FILE_PY = [
   "costanti.py", "formule.py", "portata_cavo.py", "batterie_litio.py",
@@ -1429,6 +1429,7 @@ function aggiornaStatoConnessione() {
 window.addEventListener("online", aggiornaStatoConnessione);
 window.addEventListener("offline", aggiornaStatoConnessione);
 aggiornaStatoConnessione();
+verificaPromemoriaBackup();
 
 let eventoInstallazioneDifferito = null;
 window.addEventListener("beforeinstallprompt", (ev) => {
@@ -1446,6 +1447,40 @@ document.getElementById("btn-installa").addEventListener("click", async () => {
 window.addEventListener("appinstalled", () => {
   document.getElementById("btn-installa").hidden = true;
 });
+
+const GIORNI_SOGLIA_PROMEMORIA_BACKUP = 30;
+
+// Mostrato al massimo una volta per sessione: se l'utente lo chiude, non
+// ricompare finché non ricarica la pagina (ma torna a comparire alla
+// prossima apertura, finché non esporta davvero un backup — vedi
+// esportaBackupCompleto() in storage.js, che aggiorna CHIAVE_ULTIMO_BACKUP).
+function verificaPromemoriaBackup() {
+  if (!esistonoDatiDaProteggere()) return;
+  if (giorniDaUltimoBackup() < GIORNI_SOGLIA_PROMEMORIA_BACKUP) return;
+  if (document.getElementById("banner-backup")) return;
+
+  const banner = document.createElement("div");
+  banner.id = "banner-backup";
+  banner.className = "banner-promemoria";
+  const testo = document.createElement("span");
+  testo.textContent = "Non esporti un backup di cronologia e progetti da un po'. Se cancelli la cache del browser, li perderesti.";
+  const btnEsporta = document.createElement("button");
+  btnEsporta.textContent = "⬇️ Esporta backup ora";
+  btnEsporta.addEventListener("click", () => {
+    esportaBackupCompleto();
+    banner.remove();
+    mostraToast("Backup esportato.");
+  });
+  const btnChiudi = document.createElement("button");
+  btnChiudi.className = "banner-chiudi";
+  btnChiudi.textContent = "✕";
+  btnChiudi.title = "Chiudi (ricomparirà al prossimo avvio se non esporti un backup)";
+  btnChiudi.addEventListener("click", () => banner.remove());
+  banner.appendChild(testo);
+  banner.appendChild(btnEsporta);
+  banner.appendChild(btnChiudi);
+  document.body.prepend(banner);
+}
 
 function mostraBannerAggiornamento() {
   if (document.getElementById("banner-aggiornamento")) return;
