@@ -6,6 +6,7 @@
 const CHIAVE_CRONOLOGIA = "cronologiaCalcoli";
 const CHIAVE_PROGETTI = "progettiSalvati";
 const CHIAVE_PREFERITI = "preferitiCalcolatori";
+const CHIAVE_ULTIMO_BACKUP = "ultimoBackupIl";
 const MAX_CRONOLOGIA = 100;
 
 function _leggiJSON(chiave, fallback) {
@@ -101,6 +102,21 @@ function esportaBackupCompleto() {
   a.download = `backup_calcolatore_${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
+  try { localStorage.setItem(CHIAVE_ULTIMO_BACKUP, new Date().toISOString()); } catch (e) { /* storage non disponibile */ }
+}
+
+// Usato dal promemoria di backup periodico (vedi app.js): Infinity se non è
+// mai stato esportato un backup, altrimenti giorni trascorsi dall'ultimo.
+function giorniDaUltimoBackup() {
+  let iso;
+  try { iso = localStorage.getItem(CHIAVE_ULTIMO_BACKUP); } catch (e) { return Infinity; }
+  if (!iso) return Infinity;
+  const millisecondi = Date.now() - new Date(iso).getTime();
+  return millisecondi / (1000 * 60 * 60 * 24);
+}
+
+function esistonoDatiDaProteggere() {
+  return leggiCronologia().length > 0 || Object.keys(leggiProgetti()).length > 0;
 }
 
 function importaBackupCompleto(testoJSON, modalita = "unisci") {

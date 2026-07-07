@@ -8,6 +8,15 @@ Le versioni precedenti alla v28 sono state sviluppate prima dell'adozione di Git
 progetto: non hanno un tag corrispondente (nessun commit storico disponibile), ma sono
 documentate qui per completezza.
 
+## [v55] - 2026-07-07
+### Added
+- Promemoria di backup periodico: se sono passati 30+ giorni dall'ultimo backup esportato (o
+  non ne è mai stato fatto uno) e ci sono dati da proteggere (preferiti/cronologia/progetti),
+  viene mostrato un banner con un pulsante "Esporta backup ora". Presente sia nella PWA
+  offline (banner in alto, tracciato in `localStorage`) sia nella versione Streamlit (avviso
+  in sidebar, tracciato nel JSON per-device). Evita di perdere i dati per una cancellazione
+  della cache del browser senza essersene accorti.
+
 ## [v54] - 2026-07-07
 ### Changed
 - Velocizzato il primo avvio della PWA offline: i 53 moduli Python vengono ora scaricati in

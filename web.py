@@ -798,6 +798,22 @@ with st.sidebar:
         _dd_sidebar["settings"]["schermo_grande"] = _schermo_grande
         _save_device_data(_dd_sidebar)
 
+    _ha_dati_da_proteggere = bool(_dd_sidebar["favorites"] or _dd_sidebar["history"] or _dd_sidebar["projects"])
+    if _ha_dati_da_proteggere:
+        _ultimo_backup_iso = _dd_sidebar["settings"].get("ultimo_backup_il")
+        _giorni_da_backup = (
+            (datetime.now() - datetime.fromisoformat(_ultimo_backup_iso)).days
+            if _ultimo_backup_iso else None
+        )
+        if _giorni_da_backup is None or _giorni_da_backup >= 30:
+            st.markdown("---")
+            st.warning(
+                "Non esporti un backup di preferiti/cronologia/progetti da un po'. "
+                "Se cambi dispositivo o cancelli i dati del browser, li perderesti. "
+                "Vai su **Progetti Salvati → Scambio con la versione offline** per esportarlo.",
+                icon="💾",
+            )
+
     st.markdown("---")
     st.markdown("[📱 **Versione offline / installabile**](https://lock909.github.io/Convertitore-misure/)")
     st.caption(
@@ -8060,7 +8076,7 @@ elif categoria == "📁  Progetti Salvati":
             backup_compat.esporta_progetti_per_pwa(_progetti),
             ensure_ascii=False, indent=2,
         )
-        st.download_button(
+        _backup_click = st.download_button(
             "⬇️ Esporta backup (per versione offline)",
             data=_backup_json,
             file_name=f"backup_calcolatore_{datetime.now().strftime('%Y-%m-%d')}.json",
@@ -8068,6 +8084,9 @@ elif categoria == "📁  Progetti Salvati":
             key="proj_backup_export",
             disabled=not _progetti,
         )
+        if _backup_click:
+            _dd_proj["settings"]["ultimo_backup_il"] = datetime.now().isoformat()
+            _save_device_data(_dd_proj)
     with col_bk2:
         _file_bk = st.file_uploader("⬆️ Importa backup (anche dalla versione offline):",
                                     type=["json"], key="proj_backup_import")
