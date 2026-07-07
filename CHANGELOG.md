@@ -8,6 +8,13 @@ Le versioni precedenti alla v28 sono state sviluppate prima dell'adozione di Git
 progetto: non hanno un tag corrispondente (nessun commit storico disponibile), ma sono
 documentate qui per completezza.
 
+## [v54] - 2026-07-07
+### Changed
+- Velocizzato il primo avvio della PWA offline: i 53 moduli Python vengono ora scaricati in
+  parallelo (`Promise.all`) invece che uno alla volta in sequenza, riducendo il tempo di
+  attesa al primo caricamento (specialmente su connessioni lente). Nessuna modifica al
+  comportamento con connessione veloce o a cache già popolata (service worker).
+
 ## [v53] - 2026-07-07
 ### Added
 - Smoke test automatico (`test.js`, attivabile con `?test=1`) su tutti i 201 calcolatori con
