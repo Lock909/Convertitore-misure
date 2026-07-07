@@ -4,7 +4,7 @@
 // i form a partire da CALCOLATORI (calcolatori.js) e mostra i risultati.
 // ==============================================================================
 
-const VERSIONE_APP = "51";
+const VERSIONE_APP = "52";
 
 const FILE_PY = [
   "costanti.py", "formule.py", "portata_cavo.py", "batterie_litio.py",
@@ -378,6 +378,11 @@ function renderForm(calc) {
     return;
   }
 
+  if (calc.speciale === "batch_cavi") {
+    renderBatchCavi(main);
+    return;
+  }
+
   if (calc.campi.length === 0) {
     const divRisultati = document.createElement("div");
     divRisultati.id = "risultati";
@@ -623,6 +628,239 @@ function renderConversione(main) {
   } else {
     esito.innerHTML = `<p class="placeholder">In attesa del motore di calcolo…</p>`;
   }
+}
+
+// ------------------------------------------------------------------ Batch cavi (vista speciale)
+//
+// Come renderConversione, questa vista è costruita a mano: serve una tabella
+// a righe dinamiche (aggiungi/rimuovi linea) che il sistema statico di campi
+// di CALCOLATORI non supporta.
+
+const COLONNE_BATCH = [
+  { name: "nome", label: "Nome", type: "text" },
+  { name: "fasi", label: "Sistema", type: "select", opzioni: ["Trifase", "Monofase"] },
+  { name: "Ib_A", label: "Ib [A]", type: "number" },
+  { name: "lunghezza_m", label: "Lunghezza [m]", type: "number" },
+  { name: "cos_phi", label: "cos φ", type: "number" },
+  { name: "isolante", label: "Isolante", type: "select", opzioni: ["PVC", "EPR"] },
+  { name: "posa", label: "Posa", type: "select", opzioni: ["B1", "B2", "C", "E"] },
+  { name: "T_amb", label: "T amb [°C]", type: "number" },
+  { name: "n_circuiti", label: "N. circuiti", type: "number" },
+  { name: "n_parallelo", label: "N. parallelo", type: "number" },
+];
+
+const RIGHE_BATCH_DEFAULT = [
+  { nome: "Linea 1", fasi: "Trifase", Ib_A: 16, lunghezza_m: 30, cos_phi: 0.9, isolante: "PVC", posa: "C", T_amb: 30, n_circuiti: 1, n_parallelo: 1 },
+  { nome: "Linea 2", fasi: "Monofase", Ib_A: 10, lunghezza_m: 25, cos_phi: 0.9, isolante: "PVC", posa: "C", T_amb: 30, n_circuiti: 1, n_parallelo: 1 },
+];
+
+function renderBatchCavi(main) {
+  const contenitore = document.createElement("div");
+
+  const scroll = document.createElement("div");
+  scroll.className = "tabella-batch-scroll";
+  const tabella = document.createElement("table");
+  tabella.className = "tabella-batch";
+  const thead = document.createElement("thead");
+  const trHead = document.createElement("tr");
+  for (const col of COLONNE_BATCH) {
+    const th = document.createElement("th");
+    th.textContent = col.label;
+    trHead.appendChild(th);
+  }
+  trHead.appendChild(document.createElement("th"));
+  thead.appendChild(trHead);
+  tabella.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  tabella.appendChild(tbody);
+  scroll.appendChild(tabella);
+  contenitore.appendChild(scroll);
+
+  function aggiungiRiga(valori) {
+    const tr = document.createElement("tr");
+    for (const col of COLONNE_BATCH) {
+      const td = document.createElement("td");
+      let el;
+      if (col.type === "select") {
+        el = document.createElement("select");
+        for (const opz of col.opzioni) el.appendChild(new Option(opz, opz));
+        el.value = valori[col.name] ?? col.opzioni[0];
+      } else {
+        el = document.createElement("input");
+        el.type = col.type === "number" ? "number" : "text";
+        if (col.type === "number") el.step = "any";
+        el.value = valori[col.name] ?? "";
+      }
+      el.name = col.name;
+      td.appendChild(el);
+      tr.appendChild(td);
+    }
+    const tdRimuovi = document.createElement("td");
+    const btnRimuovi = document.createElement("button");
+    btnRimuovi.type = "button";
+    btnRimuovi.className = "btn-rimuovi-riga";
+    btnRimuovi.textContent = "✕";
+    btnRimuovi.title = "Rimuovi riga";
+    btnRimuovi.addEventListener("click", () => tr.remove());
+    tdRimuovi.appendChild(btnRimuovi);
+    tr.appendChild(tdRimuovi);
+    tbody.appendChild(tr);
+  }
+
+  for (const riga of RIGHE_BATCH_DEFAULT) aggiungiRiga(riga);
+
+  const barraAzioni = document.createElement("div");
+  barraAzioni.className = "barra-batch-azioni";
+
+  const btnAggiungi = document.createElement("button");
+  btnAggiungi.type = "button";
+  btnAggiungi.className = "azione-btn";
+  btnAggiungi.textContent = "➕ Aggiungi riga";
+  btnAggiungi.addEventListener("click", () => aggiungiRiga({
+    nome: `Linea ${tbody.children.length + 1}`, fasi: "Trifase", Ib_A: 16, lunghezza_m: 30,
+    cos_phi: 0.9, isolante: "PVC", posa: "C", T_amb: 30, n_circuiti: 1, n_parallelo: 1,
+  }));
+  barraAzioni.appendChild(btnAggiungi);
+
+  const btnCarica = document.createElement("button");
+  btnCarica.type = "button";
+  btnCarica.className = "azione-btn";
+  btnCarica.textContent = "📂 Importa CSV";
+  const inputFile = document.createElement("input");
+  inputFile.type = "file";
+  inputFile.accept = ".csv,text/csv";
+  inputFile.style.display = "none";
+  btnCarica.addEventListener("click", () => inputFile.click());
+  inputFile.addEventListener("change", async () => {
+    const file = inputFile.files[0];
+    if (!file) return;
+    try {
+      const righe = parseCSVBatch(await file.text());
+      for (const riga of righe) aggiungiRiga(riga);
+      mostraToast(`Importate ${righe.length} righe dal CSV.`);
+    } catch (e) {
+      alert(`Errore nell'importazione del CSV: ${e}`);
+    }
+    inputFile.value = "";
+  });
+  barraAzioni.appendChild(btnCarica);
+  barraAzioni.appendChild(inputFile);
+  contenitore.appendChild(barraAzioni);
+
+  const btnCalcola = document.createElement("button");
+  btnCalcola.type = "button";
+  btnCalcola.className = "btn-calcola";
+  btnCalcola.disabled = !motorePronto;
+  btnCalcola.textContent = motorePronto ? "Dimensiona tutte le linee" : "Attendere — motore in caricamento…";
+  contenitore.appendChild(btnCalcola);
+
+  const divRisultati = document.createElement("div");
+  contenitore.appendChild(divRisultati);
+
+  let ultimiRisultati = null;
+
+  btnCalcola.addEventListener("click", () => {
+    if (!bridge) {
+      divRisultati.innerHTML = `<p class="errore">Il motore di calcolo non è ancora pronto. Attendere.</p>`;
+      return;
+    }
+    const linee = [...tbody.children].map(tr => {
+      const riga = {};
+      for (const col of COLONNE_BATCH) {
+        const el = tr.querySelector(`[name="${col.name}"]`);
+        riga[col.name] = col.type === "number" ? parseFloat(el.value) : el.value;
+      }
+      return riga;
+    });
+    if (linee.length === 0) {
+      divRisultati.innerHTML = `<p class="errore">Aggiungi almeno una linea.</p>`;
+      return;
+    }
+    const risposta = chiamaBridge("batch_dimensiona_batch", { linee_json: JSON.stringify(linee) });
+    if (risposta && risposta.errore) {
+      divRisultati.innerHTML = `<p class="errore">⚠️ ${risposta.errore}</p>`;
+      return;
+    }
+    ultimiRisultati = risposta.risultati;
+    divRisultati.innerHTML = "";
+    const nOk = ultimiRisultati.filter(r => r.esito === "OK").length;
+    const nTot = ultimiRisultati.length;
+    const riepilogo = document.createElement("p");
+    riepilogo.className = "riepilogo-batch";
+    riepilogo.textContent = nOk === nTot
+      ? `✅ Tutte le ${nTot} linee sono a norma (sezione adeguata e caduta ≤ 4%).`
+      : `⚠️ ${nOk}/${nTot} linee a norma. Controlla le righe con esito diverso da OK.`;
+    divRisultati.appendChild(riepilogo);
+    divRisultati.appendChild(renderTabellaRisultatiBatch(ultimiRisultati));
+
+    const btnExport = document.createElement("button");
+    btnExport.type = "button";
+    btnExport.className = "azione-btn";
+    btnExport.textContent = "⬇️ Esporta risultati in CSV";
+    btnExport.addEventListener("click", () => scaricaCSVBatch(ultimiRisultati));
+    divRisultati.appendChild(btnExport);
+  });
+
+  main.appendChild(contenitore);
+}
+
+const COLONNE_RISULTATO_BATCH = [
+  "nome", "fasi", "Ib_A", "lunghezza_m", "sezione_mm2", "Iz_A", "utilizzo_pct",
+  "caduta_V", "caduta_pct", "esito",
+];
+
+function renderTabellaRisultatiBatch(risultati) {
+  const tabella = document.createElement("table");
+  tabella.className = "tabella-risultati tabella-risultati-batch";
+  const thead = document.createElement("thead");
+  const trHead = document.createElement("tr");
+  for (const col of COLONNE_RISULTATO_BATCH) {
+    const th = document.createElement("th");
+    th.textContent = col;
+    trHead.appendChild(th);
+  }
+  thead.appendChild(trHead);
+  tabella.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  for (const riga of risultati) {
+    const tr = document.createElement("tr");
+    for (const col of COLONNE_RISULTATO_BATCH) {
+      const td = document.createElement("td");
+      td.textContent = col === "esito" ? riga[col] : formattaNumero(riga[col]);
+      if (col === "esito") td.classList.add(riga[col] === "OK" ? "esito-ok" : "esito-errore");
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  tabella.appendChild(tbody);
+  return tabella;
+}
+
+function parseCSVBatch(testo) {
+  const righe = testo.split(/\r?\n/).map(r => r.trim()).filter(r => r.length > 0);
+  if (righe.length < 2) throw new Error("il file non contiene righe di dati.");
+  const intestazioni = righe[0].split(",").map(h => h.trim());
+  const risultato = [];
+  for (const riga of righe.slice(1)) {
+    const valori = riga.split(",").map(v => v.trim());
+    const oggetto = {};
+    intestazioni.forEach((h, i) => { oggetto[h] = valori[i]; });
+    risultato.push(oggetto);
+  }
+  return risultato;
+}
+
+function scaricaCSVBatch(risultati) {
+  const righe = [COLONNE_RISULTATO_BATCH];
+  for (const r of risultati) righe.push(COLONNE_RISULTATO_BATCH.map(c => r[c]));
+  const csv = righe.map(r => r.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `dimensionamento_cavi_batch_${Date.now()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function leggiValoriForm(calc, form) {

@@ -546,3 +546,39 @@ footer {
 
   .overlay-menu.visibile { display: block; }
 }
+
+.tabella-batch-scroll { overflow-x: auto; margin-bottom: 10px; }
+.tabella-batch { border-collapse: collapse; width: 100%; min-width: 900px; }
+.tabella-batch th {
+  text-align: left;
+  font-size: 0.78rem;
+  color: var(--testo-attenuato);
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+.tabella-batch td { padding: 3px 6px; }
+.tabella-batch input, .tabella-batch select {
+  background: var(--bg);
+  border: 1px solid var(--bordo);
+  color: var(--testo);
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+.tabella-batch input[name="nome"] { min-width: 110px; }
+.tabella-batch .btn-rimuovi-riga {
+  background: transparent;
+  border: none;
+  color: var(--testo-attenuato);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 2px 8px;
+}
+.tabella-batch .btn-rimuovi-riga:hover { color: #e5534b; }
+.barra-batch-azioni { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.riepilogo-batch { margin: 10px 0; font-size: 0.95rem; }
+.tabella-risultati-batch td.esito-ok { color: #3fb950; }
+.tabella-risultati-batch td.esito-errore { color: #e5534b; }

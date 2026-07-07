@@ -8,6 +8,13 @@ Le versioni precedenti alla v28 sono state sviluppate prima dell'adozione di Git
 progetto: non hanno un tag corrispondente (nessun commit storico disponibile), ma sono
 documentate qui per completezza.
 
+## [v52] - 2026-07-07
+### Added
+- Dimensionamento Cavi in Batch (tabella) nella PWA offline: righe dinamiche
+  (aggiungi/rimuovi linea), importazione da CSV, calcolo di tutte le linee in un colpo solo
+  (sezione minima da portata + verifica caduta di tensione) ed esportazione dei risultati in
+  CSV. Prima era disponibile solo il dimensionamento a singola linea.
+
 ## [v51] - 2026-07-07
 ### Added
 - Grafico curva di derating del dissipatore termico nella PWA offline (potenza massima

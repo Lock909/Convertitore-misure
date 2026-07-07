@@ -915,6 +915,14 @@ const CALCOLATORI = [
     risultati: "dict",
     nota: "Applica portata cavo (CEI-UNEL 35024/1) e caduta di tensione (CEI 64-8) in un'unica passata.",
   },
+  {
+    id: "batch_dimensiona_batch",
+    categoria: "Cavi",
+    titolo: "Dimensionamento Cavi in Batch (tabella)",
+    speciale: "batch_cavi",
+    campi: [],
+    nota: "Dimensiona più linee in una volta: sezione minima da portata (CEI-UNEL 35024) e verifica caduta di tensione (CEI 64-8). Si può anche importare un CSV con le stesse colonne.",
+  },
 
   // ---------------------------------------------------------------- Meccanica
   {
