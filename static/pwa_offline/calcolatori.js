@@ -755,6 +755,19 @@ const CALCOLATORI = [
     risultati: "dict",
   },
   {
+    id: "diss_curva_derating",
+    categoria: "Elettrico",
+    titolo: "Dissipatore — Curva di derating",
+    bridge: "diss_curva_derating",
+    campi: [
+      { name: "P_max_25C", label: "P massima a 25°C [W]", type: "number", default: 100 },
+      { name: "Tj_max_C", label: "Temperatura giunzione massima [°C]", type: "number", default: 150 },
+      { name: "T_amb_max_C", label: "T ambiente massima asse X [°C]", type: "number", default: 120 },
+    ],
+    risultati: "derating",
+    nota: "Curva lineare da P_max a 25°C fino a 0 W alla Tj_max.",
+  },
+  {
     id: "illum_requisiti_ambiente",
     categoria: "Elettrico",
     titolo: "Illuminotecnica — Requisiti EN 12464-1 per ambiente",

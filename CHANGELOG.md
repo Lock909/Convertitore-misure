@@ -8,6 +8,12 @@ Le versioni precedenti alla v28 sono state sviluppate prima dell'adozione di Git
 progetto: non hanno un tag corrispondente (nessun commit storico disponibile), ma sono
 documentate qui per completezza.
 
+## [v51] - 2026-07-07
+### Added
+- Grafico curva di derating del dissipatore termico nella PWA offline (potenza massima
+  dissipabile in funzione della temperatura ambiente), già presente nella versione Streamlit
+  ma finora mancante offline.
+
 ## [v50] - 2026-07-06
 ### Added
 - Convertitore di unità di misura generico (16 grandezze: pressione, portate, lunghezza,

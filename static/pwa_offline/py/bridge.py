@@ -880,6 +880,14 @@ def diss_potenza_max_dissipabile(Tj_max_C, T_amb_C, R_jc, R_cs, R_sa_presente, R
         return _err(str(e))
 
 
+def diss_curva_derating(P_max_25C, Tj_max_C, T_amb_max_C):
+    try:
+        return _sanifica(dissipatore.curva_derating(
+            float(P_max_25C), float(Tj_max_C), float(T_amb_max_C)))
+    except ValueError as e:
+        return _err(str(e))
+
+
 # ------------------------------------------------------------------ Illuminotecnica
 
 def illum_lista_ambienti():
