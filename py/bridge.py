@@ -6,6 +6,7 @@
 # eccezioni Python: in caso di errore ritorna sempre {"errore": "..."}.
 # ==============================================================================
 
+import json
 import math
 
 import formule
@@ -959,6 +960,14 @@ def batch_dimensiona_linea(nome, fasi, Ib_A, lunghezza_m, cos_phi, isolante, pos
         }
         return _sanifica(batch_cavi.dimensiona_linea(linea))
     except (ValueError, KeyError, TypeError) as e:
+        return _err(str(e))
+
+
+def batch_dimensiona_batch(linee_json):
+    try:
+        linee = json.loads(linee_json)
+        return _sanifica({"risultati": batch_cavi.dimensiona_batch(linee)})
+    except (ValueError, TypeError) as e:
         return _err(str(e))
 
 
