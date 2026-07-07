@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python-tests:
+    name: Test calcoli + sincronizzazione moduli offline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installa dipendenze (numpy, richiesto da strumentazione.py)
+        run: pip install numpy
+      - name: Esegui test_calcoli.py
+        run: python -m unittest test_calcoli.py -v
+      - name: Verifica sincronizzazione moduli root ↔ static/pwa_offline/py
+        run: python verifica_sync_offline.py
+
+  pwa-smoke-test:
+    name: Smoke test bridge PWA offline (browser headless)
+    runs-on: ubuntu-latest
+    needs: python-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installa Playwright
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+      - name: Avvia il server statico della PWA offline
+        run: |
+          python -m http.server 8766 --directory static/pwa_offline &
+          sleep 1
+      - name: Esegui la suite di test bridge (test.js) in un browser headless
+        run: python ci/verifica_pwa_offline.py
