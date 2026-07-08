@@ -4,7 +4,7 @@
 // i form a partire da CALCOLATORI (calcolatori.js) e mostra i risultati.
 // ==============================================================================
 
-const VERSIONE_APP = "58";
+const VERSIONE_APP = "59";
 
 const FILE_PY = [
   "costanti.py", "formule.py", "portata_cavo.py", "batterie_litio.py",
@@ -1267,13 +1267,63 @@ function renderTabellaCampi(risultato, definizioni) {
   return tabella;
 }
 
+// La maggior parte dei calcolatori (risultati: "dict") non ha un elenco
+// curato di {label, unit}: mostrano direttamente il dict Python, con nomi
+// di variabile grezzi tipo "Tj_C" o "R_tot_CW". Con ~500 nomi diversi e
+// decine di convenzioni di unità nel codice (mm2, ms2, kVAR, ohm, pct...),
+// indovinare un'unità sbagliata sarebbe peggio che non mostrarne una — in
+// uno strumento di calcolo industriale un'etichetta errata è un rischio
+// reale, non solo estetico. Qui riconosciamo SOLO i suffissi verificati
+// contro le chiavi realmente restituite dai bridge (vedi CHANGELOG v59):
+// se un suffisso non è in queste tabelle, il nome resta spaziato/
+// capitalizzato ma senza unità inventata.
+const UNITA_SUFFISSO_COMPOSTO = {
+  kg_m3: "kg/m³", Nmm_grad: "N·mm/°", Nmm_rad: "N·mm/rad", ns_m: "N·s/m",
+  W_m2K: "W/(m²·K)", W_m2: "W/m²", m2_s: "m²/s", m2KW: "m²·K/W",
+  Pa_s: "Pa·s", l_min: "l/min", nl_min: "Nl/min", ohm_km: "Ω/km",
+  ohm_m: "Ω·m", N_mm: "N/mm", N_m: "N/m", rad_s: "rad/s",
+};
+// "min" ESCLUSO di proposito: nel codice significa quasi sempre "minimo"
+// (Ra_min, t_min, valore_min, Z_min_ohm) e solo raramente "minuti"
+// (t_autonomia_min) — non essendoci un modo affidabile per distinguere i
+// due casi dal solo nome della chiave, meglio non aggiungere un'unità che
+// rischia di essere sbagliata piuttosto che indovinare.
+const UNITA_SUFFISSO_SEMPLICE = {
+  pct: "%", eur: "€", ohm: "Ω", mOhm: "mΩ", kWh: "kWh", MWh: "MWh",
+  Wh: "Wh", kW: "kW", W: "W", Wp: "Wp", kVA: "kVA", kVAR: "kvar",
+  kvar: "kvar", VA: "VA", VAR: "var", mA: "mA", kA: "kA", A: "A",
+  mV: "mV", kV: "kV", V: "V", Hz: "Hz", hz: "Hz", rpm: "RPM", RPM: "RPM",
+  mm2: "mm²", mm3: "mm³", mm4: "mm⁴", m2: "m²", m3: "m³", cm: "cm",
+  mm: "mm", m: "m", deg: "°", rad: "rad", kg: "kg", lm: "lm", lux: "lx",
+  bar: "bar", mbar: "mbar", kPa: "kPa", MPa: "MPa", Pa: "Pa", pa: "Pa",
+  C: "°C", K: "K", s: "s", h: "h", dB: "dB", dBA: "dB(A)",
+  kN: "kN", N: "N", Nm: "N·m", Nmm: "N·mm", CW: "°C/W", m2KW: "m²·K/W",
+  ms2: "m/s²", fts2: "ft/s²", ins2: "in/s²", mms: "mm/s", ins: "in/s",
+  ms: "m/s",
+};
+
+function formattaEtichettaChiave(chiave) {
+  const token = chiave.split("_");
+  for (let n = Math.min(2, token.length - 1); n >= 1; n--) {
+    const suffisso = token.slice(-n).join("_");
+    const unita = n === 1 ? UNITA_SUFFISSO_SEMPLICE[suffisso] : UNITA_SUFFISSO_COMPOSTO[suffisso];
+    if (unita !== undefined) {
+      const base = token.slice(0, -n).join(" ");
+      const etichetta = base || token.join(" ");
+      return `${etichetta.charAt(0).toUpperCase()}${etichetta.slice(1)} [${unita}]`;
+    }
+  }
+  const etichetta = token.join(" ");
+  return `${etichetta.charAt(0).toUpperCase()}${etichetta.slice(1)}`;
+}
+
 function renderTabellaDict(risultato) {
   const tabella = document.createElement("table");
   tabella.className = "tabella-risultati";
   for (const [chiave, valore] of Object.entries(risultato)) {
     const tr = document.createElement("tr");
     const tdLabel = document.createElement("td");
-    tdLabel.textContent = chiave;
+    tdLabel.textContent = formattaEtichettaChiave(chiave);
     const tdVal = document.createElement("td");
     tdVal.textContent = formattaNumero(valore);
     tr.appendChild(tdLabel);
