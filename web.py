@@ -82,6 +82,29 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Streamlit mantiene st.session_state tra un rerun "a caldo" e l'altro anche
+# quando il codice di questo script viene aggiornato (es. dopo un push, se una
+# sessione era gia' aperta): un dict di risultato calcolato con la versione
+# precedente del codice puo' non avere le chiavi che la versione nuova si
+# aspetta, causando un KeyError in produzione (successo il 2026-07-08 con
+# "frequenza_cpm" nella conversione vibrazioni). Rileviamo il cambio di codice
+# confrontando l'mtime di questo file con quello registrato all'apertura della
+# sessione, e in tal caso scartiamo le cache dei risultati per forzare un
+# ricalcolo pulito coerente col codice attuale.
+_MTIME_SCRIPT = os.path.getmtime(__file__)
+if st.session_state.get("_mtime_avvio_sessione") != _MTIME_SCRIPT:
+    if "_mtime_avvio_sessione" in st.session_state:
+        for _k in list(st.session_state.keys()):
+            # "_result*": risultati calcolati con la versione precedente del
+            # codice. "_device_data": cache dei dati per-device (preferiti/
+            # cronologia/progetti/impostazioni), ricaricata da disco al
+            # prossimo _load_device_data() — anche qui un nuovo campo di
+            # primo livello aggiunto in futuro non sarebbe altrimenti presente
+            # nella cache di una sessione gia' aperta.
+            if "_result" in _k or _k == "_device_data":
+                del st.session_state[_k]
+    st.session_state["_mtime_avvio_sessione"] = _MTIME_SCRIPT
+
 st.markdown("""
 <style>
 /* ── Global ─────────────────────────────────────────── */
