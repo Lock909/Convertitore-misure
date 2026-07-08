@@ -373,6 +373,38 @@ main#contenuto-calcolatore > * {
 .tabella-risultati td:first-child { color: var(--testo-attenuato); }
 .tabella-risultati td:last-child { text-align: right; font-weight: 600; }
 
+/* Griglia di "schede metrica" (stile st.metric di Streamlit): usata per i
+   risultati scalari nome→valore (renderTabellaDict, renderTabellaCampi),
+   cosi' che tutti i calcolatori mostrino i risultati nello stesso modo,
+   indipendentemente dal fatto che abbiano un elenco curato di etichette o
+   il fallback generico sul dict grezzo. Le tabelle vere e proprie (righe
+   multiple: batch cavi, punti di taratura, riepilogo batteria) restano
+   tabelle, perche' rappresentano record ripetuti, non un insieme di
+   grandezze scalari. */
+.griglia-metriche {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.metrica-scheda {
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.metrica-scheda .metrica-etichetta {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--testo-attenuato);
+  margin-bottom: 2px;
+}
+.metrica-scheda .metrica-valore {
+  display: block;
+  font-size: 1.15rem;
+  font-weight: 600;
+  word-break: break-word;
+}
+
 p.errore {
   background: rgba(248, 81, 73, 0.12);
   border: 1px solid var(--errore);

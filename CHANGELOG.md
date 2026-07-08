@@ -21,6 +21,16 @@ documentate qui per completezza.
   tre colonne, senza doverne espandere una parte: prima il crash impediva comunque di vedere
   la sezione con le unità aggiuntive.
 
+## [v60] - 2026-07-08
+### Changed
+- I risultati scalari (renderTabellaDict e renderTabellaCampi) ora si presentano come una
+  griglia di "schede metrica" (etichetta piccola sopra, valore grande in grassetto sotto, in
+  colonne che si adattano alla larghezza) invece di una tabella impilata verticalmente — stesso
+  trattamento visivo per tutti i calcolatori, sia quelli con etichette curate a mano sia quelli
+  col fallback generico sul dict. Le tabelle con righe multiple (batch cavi, punti di taratura,
+  riepilogo batteria) restano tabelle, perché rappresentano record ripetuti e non un insieme di
+  grandezze scalari.
+
 ## [v59] - 2026-07-08
 ### Changed
 - Uniformata la presentazione dei risultati tra i ~200 calcolatori della PWA offline: la
