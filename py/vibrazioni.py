@@ -1,11 +1,29 @@
 # ==============================================================================
 # vibrazioni.py — Calcoli di analisi vibrazionale industriale
-# Riferimenti: ISO 10816-1, ISO 1940-1, IEC 60068
+# Riferimenti: ISO 10816-1, ISO 1940-1, IEC 60068, ISO 1683 (riferimenti dB)
 # ==============================================================================
 
 import math
 
 _G_STD = 9.80665   # m/s²
+_MM_PER_IN = 25.4
+_MM_PER_FT = 304.8
+_MM_PER_MIL = 0.0254
+
+# Riferimenti standard per i livelli in dB (ISO 1683): velocità 1 nm/s (ISO) o
+# 1E-8 m/s (US, convenzione storica del settore); accelerazione 1 µm/s² (ISO)
+# o 1 micro-g (US, convenzione comune nella strumentazione per accelerometri).
+_VDB_RIF_MS_ISO = 1e-9
+_VDB_RIF_MS_US = 1e-8
+_ADB_RIF_MS2_ISO = 1e-6
+_ADB_RIF_G_US = 1e-6
+
+
+def _db(valore: float, riferimento: float):
+    """20·log10(valore/riferimento), oppure None se valore <= 0 (dB non definito)."""
+    if valore <= 0:
+        return None
+    return 20.0 * math.log10(valore / riferimento)
 
 
 # ------------------------------------------------------------------------------
@@ -59,17 +77,34 @@ def converti_grandezze_vibrazionali(grandezza_in: str, valore: float, frequenza_
     a_pk_ms2  = a_pk_mms2 / 1000.0              # m/s² pk
     sqrt2     = math.sqrt(2)
 
+    v_rms_mms   = v_pk / sqrt2
+    a_rms_ms2   = a_pk_ms2 / sqrt2
+    a_rms_g     = a_rms_ms2 / _G_STD
+    v_rms_ms    = v_rms_mms / 1000.0             # per i livelli in dB (unità SI base)
+
     return {
         "spostamento_pkpk_mm":    d_pk * 2.0,
         "spostamento_pk_mm":      d_pk,
+        "spostamento_pkpk_mils":  (d_pk * 2.0) / _MM_PER_MIL,
         "velocita_pk_mms":        v_pk,
-        "velocita_rms_mms":       v_pk / sqrt2,
+        "velocita_rms_mms":       v_rms_mms,
+        "velocita_pk_ins":        v_pk / _MM_PER_IN,
+        "velocita_rms_ins":       v_rms_mms / _MM_PER_IN,
         "accelerazione_pk_ms2":   a_pk_ms2,
-        "accelerazione_rms_ms2":  a_pk_ms2 / sqrt2,
+        "accelerazione_rms_ms2":  a_rms_ms2,
         "accelerazione_pk_g":     a_pk_ms2 / _G_STD,
-        "accelerazione_rms_g":    (a_pk_ms2 / sqrt2) / _G_STD,
+        "accelerazione_rms_g":    a_rms_g,
+        "accelerazione_pk_fts2":  a_pk_ms2 / (_MM_PER_FT / 1000.0),
+        "accelerazione_rms_fts2": a_rms_ms2 / (_MM_PER_FT / 1000.0),
+        "accelerazione_pk_ins2":  a_pk_ms2 / (_MM_PER_IN / 1000.0),
+        "accelerazione_rms_ins2": a_rms_ms2 / (_MM_PER_IN / 1000.0),
+        "vdb_iso":                _db(v_rms_ms, _VDB_RIF_MS_ISO),
+        "vdb_us":                 _db(v_rms_ms, _VDB_RIF_MS_US),
+        "adb_iso":                _db(a_rms_ms2, _ADB_RIF_MS2_ISO),
+        "adb_us":                 _db(a_rms_g, _ADB_RIF_G_US),
         "omega_rad_s":            omega,
         "frequenza_hz":           frequenza_hz,
+        "frequenza_cpm":          frequenza_hz * 60.0,
     }
 
 

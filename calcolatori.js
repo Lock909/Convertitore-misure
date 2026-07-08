@@ -938,7 +938,7 @@ const CALCOLATORI = [
       { name: "frequenza_hz", label: "Frequenza [Hz]", type: "number", default: 50 },
     ],
     risultati: "dict",
-    nota: "Valido per un segnale sinusoidale puro (una sola frequenza dominante).",
+    nota: "Valido per un segnale sinusoidale puro (una sola frequenza dominante). Include anche unità imperiali (in/s, ft/s², mils), CPM e livelli in dB (rif. ISO 1683 e US).",
   },
   {
     id: "vib_classifica_iso10816",
