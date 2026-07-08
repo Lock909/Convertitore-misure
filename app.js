@@ -4,7 +4,7 @@
 // i form a partire da CALCOLATORI (calcolatori.js) e mostra i risultati.
 // ==============================================================================
 
-const VERSIONE_APP = "59";
+const VERSIONE_APP = "60";
 
 const FILE_PY = [
   "costanti.py", "formule.py", "portata_cavo.py", "batterie_litio.py",
@@ -1251,20 +1251,33 @@ function formattaNumero(v) {
   return String(v);
 }
 
-function renderTabellaCampi(risultato, definizioni) {
-  const tabella = document.createElement("table");
-  tabella.className = "tabella-risultati";
-  for (const def of definizioni) {
-    const tr = document.createElement("tr");
-    const tdLabel = document.createElement("td");
-    tdLabel.textContent = def.label;
-    const tdVal = document.createElement("td");
-    tdVal.textContent = `${formattaNumero(risultato[def.key])} ${def.unit || ""}`.trim();
-    tr.appendChild(tdLabel);
-    tr.appendChild(tdVal);
-    tabella.appendChild(tr);
+// Griglia di "schede metrica" (stile st.metric di Streamlit) condivisa da
+// renderTabellaCampi (elenco curato di {label, unit}) e renderTabellaDict
+// (fallback generico sul dict grezzo): stesso identico trattamento visivo
+// per tutti i calcolatori, a prescindere da come sono definiti i risultati.
+function renderGrigliaRisultati(coppie) {
+  const griglia = document.createElement("div");
+  griglia.className = "griglia-metriche";
+  for (const [etichetta, valore] of coppie) {
+    const scheda = document.createElement("div");
+    scheda.className = "metrica-scheda";
+    const spanEtichetta = document.createElement("span");
+    spanEtichetta.className = "metrica-etichetta";
+    spanEtichetta.textContent = etichetta;
+    const spanValore = document.createElement("span");
+    spanValore.className = "metrica-valore";
+    spanValore.textContent = valore;
+    scheda.appendChild(spanEtichetta);
+    scheda.appendChild(spanValore);
+    griglia.appendChild(scheda);
   }
-  return tabella;
+  return griglia;
+}
+
+function renderTabellaCampi(risultato, definizioni) {
+  const coppie = definizioni.map(def =>
+    [def.label, `${formattaNumero(risultato[def.key])} ${def.unit || ""}`.trim()]);
+  return renderGrigliaRisultati(coppie);
 }
 
 // La maggior parte dei calcolatori (risultati: "dict") non ha un elenco
@@ -1318,19 +1331,9 @@ function formattaEtichettaChiave(chiave) {
 }
 
 function renderTabellaDict(risultato) {
-  const tabella = document.createElement("table");
-  tabella.className = "tabella-risultati";
-  for (const [chiave, valore] of Object.entries(risultato)) {
-    const tr = document.createElement("tr");
-    const tdLabel = document.createElement("td");
-    tdLabel.textContent = formattaEtichettaChiave(chiave);
-    const tdVal = document.createElement("td");
-    tdVal.textContent = formattaNumero(valore);
-    tr.appendChild(tdLabel);
-    tr.appendChild(tdVal);
-    tabella.appendChild(tr);
-  }
-  return tabella;
+  const coppie = Object.entries(risultato).map(([chiave, valore]) =>
+    [formattaEtichettaChiave(chiave), formattaNumero(valore)]);
+  return renderGrigliaRisultati(coppie);
 }
 
 function renderBatteria(risultato) {
