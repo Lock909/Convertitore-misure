@@ -60,6 +60,7 @@ import rumore_industriale
 import performance_level
 import automazione
 import idraulica
+import strumentazione
 
 
 def _err(msg: str) -> dict:
@@ -300,6 +301,23 @@ def ip_esempi_uso():
 def confronto_classi_ie(P_kw, ore_anno, costo_kwh):
     try:
         return motore_asincrono.confronto_classi_ie(float(P_kw), float(ore_anno), float(costo_kwh))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def motore_da_targa(P_kw, n_rpm, V_v, cos_phi, eta_pct, poli, f_hz, lambda_max, k_spunto):
+    try:
+        return _sanifica(motore_asincrono.da_targa(
+            float(P_kw), float(n_rpm), float(V_v), float(cos_phi), float(eta_pct),
+            int(poli), float(f_hz), float(lambda_max), float(k_spunto)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def motore_caratteristica_tn(T_n_nm, n_sync_rpm, s_n, lambda_max):
+    try:
+        return _sanifica(motore_asincrono.caratteristica_tn(
+            float(T_n_nm), float(n_sync_rpm), float(s_n), float(lambda_max)))
     except ValueError as e:
         return _err(str(e))
 
@@ -1895,3 +1913,57 @@ def conv_esegui_tutte(categoria, da_unita, valore):
         except ValueError:
             risultati[u] = None
     return _sanifica({"risultati": risultati})
+
+
+# ------------------------------------------------------------------ Strumentazione (taratura/incertezza)
+
+def strum_errore_misura(valore_misurato, fondo_scala, errore_pct_fs, n_decimali_display):
+    try:
+        return _sanifica(strumentazione.calcola_errore_misura(
+            float(valore_misurato), float(fondo_scala), float(errore_pct_fs), int(n_decimali_display)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def strum_taratura(punti_json, grado):
+    try:
+        punti = json.loads(punti_json)
+        return _sanifica(strumentazione.taratura(punti, int(grado)))
+    except (ValueError, TypeError) as e:
+        return _err(str(e))
+
+
+def strum_applica_taratura(coeff_json, valore_letto):
+    try:
+        coeff = json.loads(coeff_json)
+        return {"valore_corretto": strumentazione.applica_taratura(coeff, float(valore_letto))}
+    except (ValueError, TypeError) as e:
+        return _err(str(e))
+
+
+def strum_interpola_taratura(punti_json, x, estrapola):
+    try:
+        tabella = json.loads(punti_json)
+        return _sanifica(strumentazione.interpola_taratura(tabella, float(x), bool(estrapola)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def strum_caratterizza_rtd(punti_json):
+    try:
+        punti = json.loads(punti_json)
+        return _sanifica(strumentazione.caratterizza_rtd(punti))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def strum_caratterizza_offset_tc(punti_json, tipo):
+    try:
+        punti = json.loads(punti_json)
+        return _sanifica(strumentazione.caratterizza_offset_tc(punti, tipo))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def strum_tipi_termocoppia_diretta():
+    return {"tipi": strumentazione.tipi_termocoppia_diretta()}
