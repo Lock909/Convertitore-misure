@@ -19,7 +19,7 @@ _ADB_RIF_MS2_ISO = 1e-6
 _ADB_RIF_G_US = 1e-6
 
 
-def _db(valore: float, riferimento: float):
+def livello_db(valore: float, riferimento: float):
     """20·log10(valore/riferimento), oppure None se valore <= 0 (dB non definito)."""
     if valore <= 0:
         return None
@@ -98,10 +98,10 @@ def converti_grandezze_vibrazionali(grandezza_in: str, valore: float, frequenza_
         "accelerazione_rms_fts2": a_rms_ms2 / (_MM_PER_FT / 1000.0),
         "accelerazione_pk_ins2":  a_pk_ms2 / (_MM_PER_IN / 1000.0),
         "accelerazione_rms_ins2": a_rms_ms2 / (_MM_PER_IN / 1000.0),
-        "vdb_iso":                _db(v_rms_ms, _VDB_RIF_MS_ISO),
-        "vdb_us":                 _db(v_rms_ms, _VDB_RIF_MS_US),
-        "adb_iso":                _db(a_rms_ms2, _ADB_RIF_MS2_ISO),
-        "adb_us":                 _db(a_rms_g, _ADB_RIF_G_US),
+        "vdb_iso":                livello_db(v_rms_ms, _VDB_RIF_MS_ISO),
+        "vdb_us":                 livello_db(v_rms_ms, _VDB_RIF_MS_US),
+        "adb_iso":                livello_db(a_rms_ms2, _ADB_RIF_MS2_ISO),
+        "adb_us":                 livello_db(a_rms_g, _ADB_RIF_G_US),
         "omega_rad_s":            omega,
         "frequenza_hz":           frequenza_hz,
         "frequenza_cpm":          frequenza_hz * 60.0,

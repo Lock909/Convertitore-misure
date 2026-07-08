@@ -8,6 +8,19 @@ Le versioni precedenti alla v28 sono state sviluppate prima dell'adozione di Git
 progetto: non hanno un tag corrispondente (nessun commit storico disponibile), ma sono
 documentate qui per completezza.
 
+## [v57] - 2026-07-08
+### Fixed
+- Crash `KeyError` in produzione sulla Conversione Grandezze Vibrazionali (Streamlit): il
+  risultato salvato in sessione da un'esecuzione precedente all'aggiornamento v56 non aveva i
+  nuovi campi (frequenza_cpm, unità imperiali, dB), e Streamlit mantiene lo stato di sessione
+  anche dopo un aggiornamento del codice in corsa — accedervi con `dict['chiave']` faceva
+  crashare la pagina. Ora si usa `.get()` con un fallback ricalcolato dai campi originali
+  (sempre presenti), verificato per coincidere esattamente col ricalcolo diretto.
+### Changed
+- La stessa vista ora mostra tutte le conversioni (SI, imperiali, dB) in un'unica schermata a
+  tre colonne, senza doverne espandere una parte: prima il crash impediva comunque di vedere
+  la sezione con le unità aggiuntive.
+
 ## [v56] - 2026-07-08
 ### Added
 - Conversione grandezze vibrazionali (Streamlit + PWA offline): estesa con unità imperiali
