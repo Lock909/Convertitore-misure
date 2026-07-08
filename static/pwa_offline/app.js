@@ -4,7 +4,7 @@
 // i form a partire da CALCOLATORI (calcolatori.js) e mostra i risultati.
 // ==============================================================================
 
-const VERSIONE_APP = "60";
+const VERSIONE_APP = "61";
 
 const FILE_PY = [
   "costanti.py", "formule.py", "portata_cavo.py", "batterie_litio.py",
@@ -1339,23 +1339,14 @@ function renderTabellaDict(risultato) {
 function renderBatteria(risultato) {
   const contenitore = document.createElement("div");
 
-  const riepilogo = document.createElement("table");
-  riepilogo.className = "tabella-risultati";
-  const righeRiepilogo = [
+  const coppieRiepilogo = [
     ["Capacità effettiva pacco", `${formattaNumero(risultato.C_eff_pacco_Ah)} Ah`],
     ["Autonomia stimata", `${formattaNumero(risultato.t_autonomia_h)} h`],
     ["Corrente pacco", `${formattaNumero(risultato.I_pacco_A)} A`],
     ["Tensione nominale pacco", `${formattaNumero(risultato.tensione_nominale_pacco_V)} V`],
     ["Tensione iniziale → finale", `${formattaNumero(risultato.tensione_iniziale_V)} V → ${formattaNumero(risultato.tensione_finale_V)} V`],
   ];
-  for (const [l, v] of righeRiepilogo) {
-    const tr = document.createElement("tr");
-    const td1 = document.createElement("td"); td1.textContent = l;
-    const td2 = document.createElement("td"); td2.textContent = v;
-    tr.appendChild(td1); tr.appendChild(td2);
-    riepilogo.appendChild(tr);
-  }
-  contenitore.appendChild(riepilogo);
+  contenitore.appendChild(renderGrigliaRisultati(coppieRiepilogo));
 
   contenitore.appendChild(grafico_svg(risultato.capacita_erogata_Ah, risultato.tensione_pacco_V,
     "Capacità erogata [Ah]", "Tensione pacco [V]"));

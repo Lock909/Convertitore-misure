@@ -21,6 +21,12 @@ documentate qui per completezza.
   tre colonne, senza doverne espandere una parte: prima il crash impediva comunque di vedere
   la sezione con le unità aggiuntive.
 
+## [v61] - 2026-07-08
+### Changed
+- Anche il riepilogo del calcolatore "Batteria Li-Ion — curva di scarica" usa ora la stessa
+  griglia di schede metrica introdotta in v60 (era rimasta una tabella), per coerenza completa
+  con tutti gli altri calcolatori.
+
 ## [v60] - 2026-07-08
 ### Changed
 - I risultati scalari (renderTabellaDict e renderTabellaCampi) ora si presentano come una
