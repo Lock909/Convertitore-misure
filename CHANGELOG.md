@@ -21,6 +21,20 @@ documentate qui per completezza.
   tre colonne, senza doverne espandere una parte: prima il crash impediva comunque di vedere
   la sezione con le unità aggiuntive.
 
+## [v59] - 2026-07-08
+### Changed
+- Uniformata la presentazione dei risultati tra i ~200 calcolatori della PWA offline: la
+  maggioranza (191 su 209) mostrava i nomi grezzi delle variabili Python (es. "Tj_C",
+  "R_tot_CW") invece di etichette leggibili con unità come i pochi calcolatori curati a mano
+  (es. "Potenza rifasante necessaria — 55.3 kVAR"). Aggiunto un formattatore automatico che
+  riconosce ~60 suffissi di unità verificati contro tutte le chiavi realmente restituite dai
+  bridge (es. "Tj_C" → "Tj [°C]", "R_tot_CW" → "R tot [°C/W]"): dove il suffisso non è
+  riconosciuto con certezza, il nome resta solo spaziato/capitalizzato senza inventare
+  un'unità — in uno strumento di calcolo industriale un'etichetta sbagliata è un rischio
+  reale, non solo estetico (scartato di proposito il suffisso "min", ambiguo tra "minimo" e
+  "minuti" nel codice esistente: avrebbe etichettato erroneamente valori come "Ra_min" o
+  "valore_min").
+
 ## [v58] - 2026-07-08
 ### Added
 - Colmati gap trovati con un confronto sistematico Streamlit ↔ PWA offline (tutti gli altri
