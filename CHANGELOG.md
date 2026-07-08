@@ -21,6 +21,23 @@ documentate qui per completezza.
   tre colonne, senza doverne espandere una parte: prima il crash impediva comunque di vedere
   la sezione con le unità aggiuntive.
 
+## [v58] - 2026-07-08
+### Added
+- Colmati gap trovati con un confronto sistematico Streamlit ↔ PWA offline (tutti gli altri
+  strumenti erano già allineati): "Motore asincrono — Grandezze da dati di targa" (con curva
+  coppia-velocità di Kloss) e 5 strumenti di strumentazione/metrologia finora presenti solo su
+  Streamlit — "Errore di misura e incertezza", "Taratura strumento" (con applicazione della
+  correzione a una nuova lettura), "Interpolazione da certificato di taratura",
+  "Caratterizzazione RTD (R0/α reali)", "Offset taratura termocoppia". I quattro strumenti a
+  tabella punti condividono una nuova vista generica riutilizzabile (`tabella_punti`).
+### Fixed
+- Bug nella selezione di default dei campi a tendina con opzioni numeriche (es. "Numero poli"):
+  il confronto tra il valore selezionato e il default falliva per una discrepanza di tipo
+  (numero vs stringa), selezionando sempre la prima opzione della lista invece del default
+  dichiarato. Introdotto testando il nuovo calcolatore motore asincrono.
+- Funzione bridge `strum_interpola_taratura`: nome del parametro non coerente con la vista
+  generica `tabella_punti` (`tabella_json` invece di `punti_json`), causava un errore a runtime.
+
 ## [v56] - 2026-07-08
 ### Added
 - Conversione grandezze vibrazionali (Streamlit + PWA offline): estesa con unità imperiali

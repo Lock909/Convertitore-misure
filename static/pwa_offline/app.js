@@ -4,7 +4,7 @@
 // i form a partire da CALCOLATORI (calcolatori.js) e mostra i risultati.
 // ==============================================================================
 
-const VERSIONE_APP = "57";
+const VERSIONE_APP = "58";
 
 const FILE_PY = [
   "costanti.py", "formule.py", "portata_cavo.py", "batterie_litio.py",
@@ -287,7 +287,7 @@ function creaCampoElemento(campo, prefisso) {
       const opt = document.createElement("option");
       opt.value = opz;
       opt.textContent = opz;
-      if (campo.default !== undefined && opz === String(campo.default)) opt.selected = true;
+      if (campo.default !== undefined && String(opz) === String(campo.default)) opt.selected = true;
       input.appendChild(opt);
     }
   } else if (campo.type === "checkbox") {
@@ -380,6 +380,11 @@ function renderForm(calc) {
 
   if (calc.speciale === "batch_cavi") {
     renderBatchCavi(main);
+    return;
+  }
+
+  if (calc.speciale === "tabella_punti") {
+    renderTabellaPunti(main, calc);
     return;
   }
 
@@ -483,6 +488,8 @@ function renderFormConfronto(calc, main) {
           pannello.appendChild(renderBatteria(risultato));
         } else if (calc.risultati === "derating") {
           pannello.appendChild(renderDerating(risultato));
+        } else if (calc.risultati === "motore_targa") {
+          pannello.appendChild(renderMotoreTarga(risultato, kwargs.lambda_max));
         } else {
           pannello.appendChild(renderTabellaCampi(risultato, calc.risultati));
         }
@@ -863,6 +870,169 @@ function scaricaCSVBatch(risultati) {
   URL.revokeObjectURL(url);
 }
 
+// ------------------------------------------------------------------ Tabella punti (vista speciale)
+//
+// Riutilizzata da 4 calcolatori di taratura/caratterizzazione strumenti
+// (curva di correzione, interpolazione da certificato, RTD, offset
+// termocoppia): tutti condividono lo stesso schema — una tabella a righe
+// dinamiche di due colonne numeriche, eventuali campi extra, un bottone che
+// chiama un'unica funzione bridge con i punti serializzati in JSON.
+
+function renderTabellaPunti(main, calc) {
+  const config = calc.tabellaPunti;
+  const contenitore = document.createElement("div");
+  const valoriExtra = {};
+
+  for (const campo of (config.campiExtra || [])) {
+    const wrap = document.createElement("div");
+    wrap.className = "campo";
+    const label = document.createElement("label");
+    label.textContent = campo.label;
+    wrap.appendChild(label);
+    let el;
+    if (campo.type === "select") {
+      el = document.createElement("select");
+      for (const opz of campo.opzioni) el.appendChild(new Option(opz.testo, opz.valore));
+      if (campo.default !== undefined) el.value = campo.default;
+    } else if (campo.type === "select_dinamico_bridge") {
+      el = document.createElement("select");
+      if (motorePronto) {
+        const r = chiamaBridge(campo.bridgeOpzioni, {});
+        for (const opz of (r && r[campo.chiaveOpzioni]) || []) el.appendChild(new Option(opz, opz));
+      }
+    } else if (campo.type === "checkbox") {
+      el = document.createElement("input");
+      el.type = "checkbox";
+      el.checked = !!campo.default;
+    } else {
+      el = document.createElement("input");
+      el.type = "number";
+      el.step = "any";
+      if (campo.default !== undefined) el.value = campo.default;
+    }
+    wrap.appendChild(el);
+    main.appendChild(wrap);
+    valoriExtra[campo.name] = () => campo.type === "checkbox" ? el.checked : (campo.type === "select" || campo.type === "select_dinamico_bridge" ? el.value : parseFloat(el.value));
+  }
+
+  const scroll = document.createElement("div");
+  scroll.className = "tabella-batch-scroll";
+  const tabella = document.createElement("table");
+  tabella.className = "tabella-batch";
+  const thead = document.createElement("thead");
+  const trHead = document.createElement("tr");
+  for (const col of config.colonne) {
+    const th = document.createElement("th");
+    th.textContent = col.label;
+    trHead.appendChild(th);
+  }
+  trHead.appendChild(document.createElement("th"));
+  thead.appendChild(trHead);
+  tabella.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  tabella.appendChild(tbody);
+  scroll.appendChild(tabella);
+  contenitore.appendChild(scroll);
+
+  function aggiungiRiga(valori) {
+    const tr = document.createElement("tr");
+    for (let i = 0; i < config.colonne.length; i++) {
+      const td = document.createElement("td");
+      const el = document.createElement("input");
+      el.type = "number";
+      el.step = "any";
+      el.value = valori ? valori[i] : "";
+      td.appendChild(el);
+      tr.appendChild(td);
+    }
+    const tdRimuovi = document.createElement("td");
+    const btnRimuovi = document.createElement("button");
+    btnRimuovi.type = "button";
+    btnRimuovi.className = "btn-rimuovi-riga";
+    btnRimuovi.textContent = "✕";
+    btnRimuovi.title = "Rimuovi riga";
+    btnRimuovi.addEventListener("click", () => tr.remove());
+    tdRimuovi.appendChild(btnRimuovi);
+    tr.appendChild(tdRimuovi);
+    tbody.appendChild(tr);
+  }
+
+  for (const riga of config.defaultRighe) aggiungiRiga(riga);
+
+  const btnAggiungi = document.createElement("button");
+  btnAggiungi.type = "button";
+  btnAggiungi.className = "azione-btn";
+  btnAggiungi.textContent = "➕ Aggiungi riga";
+  btnAggiungi.addEventListener("click", () => aggiungiRiga(null));
+  contenitore.appendChild(btnAggiungi);
+
+  const btnCalcola = document.createElement("button");
+  btnCalcola.type = "button";
+  btnCalcola.className = "btn-calcola";
+  btnCalcola.disabled = !motorePronto;
+  btnCalcola.textContent = motorePronto ? "Calcola" : "Attendere — motore in caricamento…";
+  contenitore.appendChild(btnCalcola);
+
+  const divRisultati = document.createElement("div");
+  contenitore.appendChild(divRisultati);
+
+  btnCalcola.addEventListener("click", () => {
+    if (!bridge) {
+      divRisultati.innerHTML = `<p class="errore">Il motore di calcolo non è ancora pronto. Attendere.</p>`;
+      return;
+    }
+    const punti = [...tbody.children].map(tr => {
+      const inputs = tr.querySelectorAll("input");
+      return [...inputs].map(inp => parseFloat(inp.value));
+    });
+    const kwargs = { punti_json: JSON.stringify(punti) };
+    for (const [nome, leggi] of Object.entries(valoriExtra)) kwargs[nome] = leggi();
+
+    let risposta;
+    try {
+      risposta = chiamaBridge(config.bridge, kwargs);
+    } catch (e) {
+      divRisultati.innerHTML = `<p class="errore">Errore inatteso: ${e}</p>`;
+      return;
+    }
+    if (risposta && risposta.errore) {
+      divRisultati.innerHTML = `<p class="errore">⚠️ ${risposta.errore}</p>`;
+      return;
+    }
+    divRisultati.innerHTML = "";
+    divRisultati.appendChild(renderTabellaDict(risposta));
+
+    if (config.applicaCorrezione && risposta.coeff) {
+      const wrapCorrezione = document.createElement("div");
+      wrapCorrezione.className = "campo";
+      const label = document.createElement("label");
+      label.textContent = "Applica la correzione a una nuova lettura";
+      const inputLetto = document.createElement("input");
+      inputLetto.type = "number";
+      inputLetto.step = "any";
+      inputLetto.value = "0";
+      const btnCorreggi = document.createElement("button");
+      btnCorreggi.type = "button";
+      btnCorreggi.className = "azione-btn";
+      btnCorreggi.textContent = "Correggi lettura";
+      const esitoCorrezione = document.createElement("p");
+      btnCorreggi.addEventListener("click", () => {
+        const r = chiamaBridge("strum_applica_taratura", {
+          coeff_json: JSON.stringify(risposta.coeff), valore_letto: parseFloat(inputLetto.value),
+        });
+        esitoCorrezione.textContent = (r && r.errore) ? `⚠️ ${r.errore}` : `Valore corretto: ${formattaNumero(r.valore_corretto)}`;
+      });
+      wrapCorrezione.appendChild(label);
+      wrapCorrezione.appendChild(inputLetto);
+      wrapCorrezione.appendChild(btnCorreggi);
+      wrapCorrezione.appendChild(esitoCorrezione);
+      divRisultati.appendChild(wrapCorrezione);
+    }
+  });
+
+  main.appendChild(contenitore);
+}
+
 function leggiValoriForm(calc, form) {
   const kwargs = {};
   for (const campo of calc.campi) {
@@ -898,6 +1068,8 @@ function eseguiCalcolo(calc, form) {
     divRisultati.appendChild(renderBatteria(risultato));
   } else if (calc.risultati === "derating") {
     divRisultati.appendChild(renderDerating(risultato));
+  } else if (calc.risultati === "motore_targa") {
+    divRisultati.appendChild(renderMotoreTarga(risultato, kwargs.lambda_max));
   } else {
     divRisultati.appendChild(renderTabellaCampi(risultato, calc.risultati));
   }
@@ -1142,6 +1314,25 @@ function renderDerating(risultato) {
   const contenitore = document.createElement("div");
   contenitore.appendChild(grafico_svg(risultato.T_amb_C, risultato.P_max_W,
     "T ambiente [°C]", "P massima [W]"));
+  return contenitore;
+}
+
+function renderMotoreTarga(risultato, lambdaMax) {
+  const contenitore = document.createElement("div");
+  contenitore.appendChild(renderTabellaDict(risultato));
+  try {
+    const tn = chiamaBridge("motore_caratteristica_tn", {
+      T_n_nm: risultato.T_n_nm, n_sync_rpm: risultato.n_sync_rpm,
+      s_n: risultato.s_n, lambda_max: lambdaMax,
+    });
+    if (tn && !tn.errore) {
+      const titoloGrafico = document.createElement("p");
+      titoloGrafico.className = "nota-calcolatore";
+      titoloGrafico.textContent = `Curva coppia-velocità (Kloss) — coppia massima ${formattaNumero(tn.T_cr_nm)} N·m a ${formattaNumero(tn.n_cr_rpm)} RPM.`;
+      contenitore.appendChild(titoloGrafico);
+      contenitore.appendChild(grafico_svg(tn.n_rpm, tn.T_nm, "Velocità [RPM]", "Coppia [N·m]"));
+    }
+  } catch (e) { /* la curva è un complemento: se fallisce si mostra comunque la tabella sopra */ }
   return contenitore;
 }
 
