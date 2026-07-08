@@ -4241,15 +4241,39 @@ elif categoria == "〜  Vibrazioni":
                 st.metric("Accelerazione RMS",    f"{r['accelerazione_rms_ms2']:.4g} m/s²")
                 st.metric("Accelerazione peak",   f"{r['accelerazione_pk_g']:.4g} g")
                 st.metric("Accelerazione RMS",    f"{r['accelerazione_rms_g']:.4g} g")
-            st.caption(f"ω = {r['omega_rad_s']:.4f} rad/s")
+            st.caption(f"ω = {r['omega_rad_s']:.4f} rad/s · {r['frequenza_hz']:.4g} Hz = {r['frequenza_cpm']:.4g} CPM")
+
+            with st.expander("Unità imperiali e livelli in dB"):
+                col3, col4 = st.columns(2)
+                with col3:
+                    st.metric("Spostamento pk-pk", f"{r['spostamento_pkpk_mils']:.4g} mils")
+                    st.metric("Velocita peak",      f"{r['velocita_pk_ins']:.4g} in/s")
+                    st.metric("Velocita RMS",        f"{r['velocita_rms_ins']:.4g} in/s")
+                    st.metric("Accelerazione RMS",   f"{r['accelerazione_rms_fts2']:.4g} ft/s²")
+                    st.metric("Accelerazione RMS",   f"{r['accelerazione_rms_ins2']:.4g} in/s²")
+                with col4:
+                    st.metric("VdB (rif. ISO 1nm/s)",     f"{r['vdb_iso']:.4g}" if r['vdb_iso'] is not None else "—")
+                    st.metric("VdB (rif. US 1E-8 m/s)",   f"{r['vdb_us']:.4g}" if r['vdb_us'] is not None else "—")
+                    st.metric("AdB (rif. ISO 1µm/s²)",    f"{r['adb_iso']:.4g}" if r['adb_iso'] is not None else "—")
+                    st.metric("AdB (rif. US 1 micro-g)",  f"{r['adb_us']:.4g}" if r['adb_us'] is not None else "—")
+                st.caption(
+                    "Livelli in dB secondo i riferimenti standard ISO 1683 (1 µm/s² per l'accelerazione, "
+                    "1 nm/s per la velocità) e le convenzioni US storiche del settore (1 micro-g, 1E-8 m/s)."
+                )
+
             _export_csv_button(
                 "Conversione Grandezze Vibrazionali",
                 {
                     "Grandezza ingresso": rr["g_label"], "Valore": rr["val"], "Frequenza [Hz]": rr["freq"],
+                    "Frequenza [CPM]": f"{r['frequenza_cpm']:.4g}",
                     "Spostamento pk-pk [mm]": f"{r['spostamento_pkpk_mm']:.4g}",
+                    "Spostamento pk-pk [mils]": f"{r['spostamento_pkpk_mils']:.4g}",
                     "Velocita RMS [mm/s]": f"{r['velocita_rms_mms']:.4g}",
+                    "Velocita RMS [in/s]": f"{r['velocita_rms_ins']:.4g}",
                     "Accelerazione RMS [m/s²]": f"{r['accelerazione_rms_ms2']:.4g}",
                     "Accelerazione RMS [g]": f"{r['accelerazione_rms_g']:.4g}",
+                    "VdB ISO": f"{r['vdb_iso']:.4g}" if r['vdb_iso'] is not None else "",
+                    "AdB ISO": f"{r['adb_iso']:.4g}" if r['adb_iso'] is not None else "",
                 },
                 key="vibconv_export",
             )

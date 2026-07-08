@@ -8,6 +8,17 @@ Le versioni precedenti alla v28 sono state sviluppate prima dell'adozione di Git
 progetto: non hanno un tag corrispondente (nessun commit storico disponibile), ma sono
 documentate qui per completezza.
 
+## [v56] - 2026-07-08
+### Added
+- Conversione grandezze vibrazionali (Streamlit + PWA offline): estesa con unità imperiali
+  (velocità in in/s, accelerazione in ft/s²/in/s², spostamento in mils pk-pk), frequenza in
+  CPM oltre a Hz, e livelli in dB (VdB/AdB) con riferimenti sia ISO 1683 (1 nm/s, 1 µm/s²) sia
+  US storici (1E-8 m/s, 1 micro-g). Estratta confrontando input/output del programma
+  "DLI Watchman VibCon" (fornito dall'utente come screenshot, senza sorgente disponibile):
+  tutti i valori tranne adb_iso coincidono a 3+ cifre significative con l'originale (adb_iso
+  usa i riferimenti ISO 1683 standard, con uno scarto di ~0.2 dB verosimilmente dovuto ad
+  arrotondamenti interni del programma originale, non riproducibile senza il sorgente).
+
 ## [v55] - 2026-07-07
 ### Added
 - Promemoria di backup periodico: se sono passati 30+ giorni dall'ultimo backup esportato (o

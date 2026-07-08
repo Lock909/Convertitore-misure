@@ -230,6 +230,27 @@ class TestVibrazioni(unittest.TestCase):
         with self.assertRaises(ValueError):
             vibrazioni.converti_grandezze_vibrazionali("velocita_rms_mms", 5.0, 0.0)
 
+    def test_conversione_unita_imperiali_e_db(self):
+        # Caso di riferimento incrociato con DLI Watchman VibCon (60 Hz, 1.36 mm/s RMS):
+        # tutte le grandezze tranne adb_iso coincidono con l'output del programma a 3+
+        # cifre significative (adb_iso: 114.2 calcolato vs 114.4 mostrato da VibCon — la
+        # formula usa i riferimenti standard ISO 1683, lo scarto è verosimilmente un
+        # arrotondamento interno di quel programma, non riproducibile senza il sorgente).
+        r = vibrazioni.converti_grandezze_vibrazionali("velocita_rms_mms", 1.36, 60.0)
+        self.assertAlmostEqual(r["velocita_rms_ins"], 0.0535, places=4)
+        self.assertAlmostEqual(r["velocita_pk_ins"], 0.0757, places=4)
+        self.assertAlmostEqual(r["accelerazione_rms_g"], 0.0523, places=4)
+        self.assertAlmostEqual(r["accelerazione_rms_fts2"], 1.68, places=2)
+        self.assertAlmostEqual(r["accelerazione_rms_ins2"], 20.2, places=1)
+        self.assertAlmostEqual(r["spostamento_pkpk_mils"], 0.402, places=3)
+        self.assertAlmostEqual(r["vdb_iso"], 122.7, places=1)
+        self.assertAlmostEqual(r["frequenza_cpm"], 3600.0, places=6)
+
+    def test_conversione_db_none_per_valore_zero(self):
+        r = vibrazioni.converti_grandezze_vibrazionali("velocita_rms_mms", 0.0, 50.0)
+        self.assertIsNone(r["vdb_iso"])
+        self.assertIsNone(r["adb_iso"])
+
     def test_iso10816_zona_a(self):
         zona, colore, _, _ = vibrazioni.classifica_iso10816(0.5, "Classe I — Piccole macchine < 15 kW")
         self.assertEqual(zona, "A")
