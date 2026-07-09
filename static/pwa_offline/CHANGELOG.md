@@ -9,6 +9,11 @@ progetto: non hanno un tag corrispondente (nessun commit storico disponibile), m
 documentate qui per completezza.
 
 ## [v68] - 2026-07-09
+### Added
+- Nuova vista "Cronologia versioni", sempre raggiungibile (pulsante "🕘 Versioni" nell'header
+  della PWA, sezione dedicata sotto "📁 Progetti Salvati" in Streamlit): elenca tutte le
+  release passate con le relative novità, per chi vuole ricontrollare cosa è cambiato senza
+  aspettare il banner mostrato una tantum dopo un aggiornamento.
 ### Changed
 - Il banner "cosa è cambiato" ora copre tutte le versioni intercorse dall'ultima vista (non
   solo l'ultima): chi non apre l'app per un po' e salta più di un aggiornamento vede l'elenco

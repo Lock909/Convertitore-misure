@@ -734,6 +734,18 @@ def _estrai_novita_intervallo(versione_vista, versione_corrente: str) -> list:
     return [(n, _analizza_sezioni_blocco(b)) for n, b in selezionati]
 
 
+def _elenca_tutte_le_versioni() -> list:
+    """Ritorna [(numero_versione, sezioni), ...] per OGNI blocco del changelog,
+    dalla più recente alla più vecchia — per la vista "Cronologia versioni"."""
+    try:
+        testo = open(_CHANGELOG_PATH, "r", encoding="utf-8").read()
+    except OSError:
+        return []
+    blocchi = _elenca_blocchi_changelog(testo)
+    blocchi.sort(key=lambda x: x[0], reverse=True)
+    return [(n, _analizza_sezioni_blocco(b)) for n, b in blocchi]
+
+
 def _scrivi_cookie_versione_vista(versione: str) -> None:
     # Stessa tecnica di _get_device_id(): st.markdown(unsafe_allow_html=True)
     # inietta via innerHTML e i browser ignorano gli <script> inseriti così,
@@ -8645,6 +8657,19 @@ elif categoria == "📁  Progetti Salvati":
                     st.rerun()
             except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as e:
                 st.error(f"Importazione non riuscita: {e}")
+
+    st.markdown("---")
+    st.subheader("🕘 Cronologia versioni")
+    st.caption("Novità di ogni versione dell'app, dalla più recente alla più vecchia — utile per "
+               "ricontrollare cosa è cambiato senza aspettare il banner mostrato dopo un aggiornamento.")
+    for _num_v, _sezioni_v in _elenca_tutte_le_versioni():
+        with st.expander(f"v{_num_v}"):
+            for _nome_sez, _bullet in _sezioni_v:
+                _etichetta = _NOMI_SEZIONE_CHANGELOG.get(_nome_sez, _nome_sez)
+                if _etichetta:
+                    st.markdown(f"**{_etichetta}**")
+                for _b in _bullet:
+                    st.markdown(f"- {_b}")
 
 st.markdown("---")
 st.caption("Disclaimer: strumento indicativo basato sulle norme tecniche CEI 64-8, ISO 10816, ISO 1940, ISO 1217, IEC 60751, NIST ITS-90. Non sostituisce la progettazione formale di un professionista abilitato.")

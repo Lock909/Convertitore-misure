@@ -1485,6 +1485,74 @@ function renderCronologia() {
   main.appendChild(lista);
 }
 
+// Cronologia versioni: elenco sfogliabile di tutte le voci di CHANGELOG.md,
+// dalla più recente alla più vecchia. A differenza del banner "cosa è
+// cambiato" (mostrato una volta sola dopo un aggiornamento), questa vista è
+// sempre raggiungibile dall'header, per chi vuole ricontrollare cosa è
+// cambiato in una versione passata.
+function renderCronologiaVersioni() {
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("attivo"));
+  const main = document.getElementById("contenuto-calcolatore");
+  main.innerHTML = "";
+
+  const titolo = document.createElement("h2");
+  titolo.textContent = "Cronologia versioni";
+  main.appendChild(titolo);
+
+  const sotto = document.createElement("p");
+  sotto.className = "placeholder";
+  sotto.textContent = "Novità di ogni versione, dalla più recente alla più vecchia.";
+  main.appendChild(sotto);
+
+  const contenitore = document.createElement("div");
+  contenitore.className = "lista-voci";
+  contenitore.textContent = "Caricamento…";
+  main.appendChild(contenitore);
+
+  fetch(`CHANGELOG.md?v=${VERSIONE_APP}`, { cache: "no-cache" })
+    .then(r => r.text())
+    .then(testo => {
+      const blocchi = _elencaBlocchiChangelog(testo)
+        .sort((a, b) => parseInt(b.versione, 10) - parseInt(a.versione, 10));
+      contenitore.innerHTML = "";
+      if (blocchi.length === 0) {
+        contenitore.innerHTML = '<p class="placeholder">Cronologia non disponibile.</p>';
+        return;
+      }
+      for (const blocco of blocchi) {
+        const card = document.createElement("div");
+        card.className = "card-voce";
+
+        const intestazione = document.createElement("div");
+        intestazione.className = "card-voce-intestazione";
+        const strong = document.createElement("strong");
+        strong.textContent = `v${blocco.versione}`;
+        intestazione.appendChild(strong);
+        card.appendChild(intestazione);
+
+        for (const sez of blocco.sezioni) {
+          if (sez.titolo) {
+            const h = document.createElement("div");
+            h.className = "banner-novita-sezione";
+            h.textContent = NOMI_SEZIONE_CHANGELOG[sez.titolo] || sez.titolo;
+            card.appendChild(h);
+          }
+          const ul = document.createElement("ul");
+          for (const b of sez.bullet) {
+            const li = document.createElement("li");
+            li.textContent = b;
+            ul.appendChild(li);
+          }
+          card.appendChild(ul);
+        }
+        contenitore.appendChild(card);
+      }
+    })
+    .catch(() => {
+      contenitore.innerHTML = '<p class="placeholder">Impossibile caricare la cronologia (serve connessione al primo avvio).</p>';
+    });
+}
+
 function renderBarraBackup(main) {
   const barra = document.createElement("div");
   barra.className = "barra-azioni";
@@ -1654,6 +1722,7 @@ avviaPyodide().then(() => {
 
 document.getElementById("btn-cronologia").addEventListener("click", renderCronologia);
 document.getElementById("btn-progetti").addEventListener("click", renderProgetti);
+document.getElementById("btn-versioni").addEventListener("click", renderCronologiaVersioni);
 
 function aggiornaStatoConnessione() {
   const badge = document.getElementById("stato-connessione");
