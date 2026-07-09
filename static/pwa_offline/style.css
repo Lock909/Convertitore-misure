@@ -119,6 +119,18 @@ body {
 }
 .banner-novita-corpo li { margin-bottom: 2px; }
 
+.banner-novita-azioni { margin-top: 8px; text-align: right; }
+.banner-novita-link {
+  background: transparent;
+  border: none;
+  color: var(--accento);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.banner-novita-link:hover { text-decoration: underline; }
+
 header {
   padding: 16px 20px;
   border-bottom: 1px solid var(--bordo);

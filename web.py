@@ -767,6 +767,11 @@ def _chiudi_banner_novita(versione: str) -> None:
     st.session_state["_banner_novita_chiuso"] = versione
 
 
+def _apri_cronologia_da_banner(versione: str) -> None:
+    st.session_state["_banner_novita_chiuso"] = versione
+    st.session_state["_nav_goto"] = "📁  Progetti Salvati"
+
+
 def _mostra_banner_novita() -> None:
     versione = _leggi_versione_app()
     if not versione:
@@ -822,6 +827,8 @@ def _mostra_banner_novita() -> None:
     col1, col2 = st.columns([30, 1])
     with col1:
         st.info(testo_md)
+        st.button("Vedi tutta la cronologia →", key="banner_novita_cronologia",
+                   on_click=_apri_cronologia_da_banner, args=(versione,))
     with col2:
         st.button("✕", key="banner_novita_chiudi", help="Chiudi",
                    on_click=_chiudi_banner_novita, args=(versione,))
