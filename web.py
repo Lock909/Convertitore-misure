@@ -22,6 +22,10 @@ except ImportError:
 import automazione
 import formule
 import idraulica
+import fulmini
+import batterie_piombo
+import misuratori_portata
+import antincendio
 import vibrazioni
 import pneumatica
 import trasmissioni
@@ -553,13 +557,14 @@ def _build_tool_index() -> list:
         "Illuminotecnica — Fattore di Manutenzione MF", "Illuminotecnica — Potenza e LENI",
         "Isolamento Termico — Parete Piana", "Isolamento Termico — Tubo Cilindrico",
         "Serbatoi — Volume e Pressione", "Serbatoi — Svuotamento (Torricelli)",
-        "Condotte Aria HVAC",
+        "Condotte Aria HVAC", "Misuratori di Portata",
     ], "🌡️  Termotecnica & Impianti", "termo_tool")
 
     _add([
         "Rumore — Somma Sorgenti", "Rumore — LEX,8h Esposizione", "Rumore — Verifica DPI (SNR)",
         "Rumore — Attenuazione per Distanza", "Performance Level — EN ISO 13849",
         "Costi Energetici e Payback Efficientamento",
+        "Protezione Fulmini (LPS)", "Antincendio — Rete Idranti/Naspi (UNI 10779)",
     ], "🔒  Sicurezza & Utilities", "sic_tool")
 
     _add([
@@ -2939,7 +2944,7 @@ elif categoria == "⚡  Calcoli Elettrici":
 
     elif tipo == "Batterie e UPS":
         st.subheader("Calcolo Batterie e UPS")
-        sub_bat = st.radio("Calcolo:", ["Autonomia batteria", "Dimensionamento banco", "Corrente di carica", "Correzione temperatura", "Curve di scarica Li-Ion"], horizontal=True, key="bat_sub")
+        sub_bat = st.radio("Calcolo:", ["Autonomia batteria", "Dimensionamento banco", "Corrente di carica", "Correzione temperatura", "Curve di scarica Li-Ion", "Piombo — Dimensionamento avanzato (IEEE 485)", "Piombo — Capacità effettiva (Peukert)"], horizontal=True, key="bat_sub")
         if sub_bat == "Autonomia batteria":
             col1, col2 = st.columns(2)
             with col1:
@@ -3040,7 +3045,7 @@ elif categoria == "⚡  Calcoli Elettrici":
                     key="bat4_export",
                 )
 
-        else:
+        elif sub_bat == "Curve di scarica Li-Ion":
             st.caption(
                 "Modello empirico (tabella OCV vs SOC tipica per celle Li-Ion NMC/NCA a 25°C) con "
                 "caduta da resistenza interna e riduzione di capacità da legge di Peukert. "
@@ -3101,6 +3106,82 @@ elif categoria == "⚡  Calcoli Elettrici":
                     dati_export[f"Autonomia a {cr}C [h]"] = round(c["t_autonomia_h"], 2)
                     dati_export[f"V finale a {cr}C [V]"] = c["tensione_finale_V"]
                 _export_csv_button("Batterie Li-Ion — Curve di scarica", dati_export, key="bli_export")
+
+        elif sub_bat == "Piombo — Dimensionamento avanzato (IEEE 485)":
+            st.caption(
+                "Si appoggia allo stesso dimensionamento di base di 'Dimensionamento banco' (DOD/invecchiamento) "
+                "e aggiunge: correzione IEEE 485 per temperatura, numero di celle in serie e tensione di fine scarica."
+            )
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                P_pb   = st.number_input("Carico P [W]:", value=5000.0, min_value=1.0, key="pb_P")
+                t_pb   = st.number_input("Autonomia richiesta [h]:", value=0.5, min_value=0.1, key="pb_t")
+            with col2:
+                V_pb   = st.number_input("Tensione banco [V]:", value=48.0, min_value=1.0, key="pb_V")
+                eta_pb = st.number_input("η inverter:", value=0.90, min_value=0.5, max_value=1.0, key="pb_eta")
+                DOD_pb = st.number_input("DOD (profondità scarica):", value=0.80, min_value=0.1, max_value=1.0, key="pb_DOD")
+            with col3:
+                fa_pb  = st.number_input("Fattore invecchiamento:", value=1.25, min_value=1.0, key="pb_fa")
+                T_pb   = st.number_input("Temperatura ambiente prevista [°C]:", value=20.0, key="pb_T")
+                tc_pb  = st.number_input("Tasso di carica boost [C]:", value=0.10, min_value=0.01, key="pb_tc")
+            if st.button("Dimensiona Banco Piombo", key="pb_btn1"):
+                try:
+                    r = batterie_piombo.dimensionamento_completo(P_pb, t_pb, V_pb, eta_pb, DOD_pb, fa_pb, T_pb, tc_pb)
+                    st.session_state["_pb1_result"] = r
+                except (ValueError, ZeroDivisionError) as e:
+                    st.session_state["_pb1_result"] = None
+                    st.error(str(e))
+
+            r = st.session_state.get("_pb1_result")
+            if r:
+                c1, c2, c3 = st.columns(3)
+                c1.metric("C nominale (base, 25°C)", f"{r['C_nominale_Ah']:.1f} Ah")
+                c2.metric("C corretta (temperatura)", f"{r['Ah_corretti_temperatura']:.1f} Ah")
+                c3.metric("Fattore temperatura", f"{r['fattore_temperatura']:.2f}")
+                c1.metric("Celle in serie", f"{r['n_celle']}")
+                c2.metric("Tensione fine scarica", f"{r['V_fine_scarica_bus']:.1f} V")
+                c3.metric("Corrente carica boost", f"{r['I_carica_A']:.2f} A")
+                _export_csv_button(
+                    "Batterie e UPS — Piombo, dimensionamento avanzato",
+                    {"Carico [W]": P_pb, "Autonomia [h]": t_pb, "V banco [V]": V_pb, "DOD": DOD_pb,
+                     "T ambiente [°C]": T_pb, "C nominale base [Ah]": f"{r['C_nominale_Ah']:.1f}",
+                     "C corretta temperatura [Ah]": f"{r['Ah_corretti_temperatura']:.1f}",
+                     "Celle in serie": r["n_celle"], "V fine scarica [V]": f"{r['V_fine_scarica_bus']:.1f}",
+                     "I carica boost [A]": f"{r['I_carica_A']:.2f}"},
+                    key="pb1_export",
+                )
+
+        elif sub_bat == "Piombo — Capacità effettiva (Peukert)":
+            st.caption(
+                "A scariche rapide (tipiche UPS, minuti anziché 10h) la capacità utile del piombo è "
+                "sensibilmente inferiore a quella nominale (legge di Peukert)."
+            )
+            col1, col2 = st.columns(2)
+            with col1:
+                C_pk  = st.number_input("Capacità nominale a 10h [Ah]:", value=100.0, min_value=1.0, key="pk_C")
+                t_pk  = st.number_input("Tempo di scarica effettivo [h]:", value=0.5, min_value=0.01, key="pk_t")
+            with col2:
+                k_pk  = st.number_input("Esponente di Peukert k:", value=1.3, min_value=1.0, max_value=2.0, step=0.01, key="pk_k")
+            if st.button("Calcola Capacità Effettiva", key="pb_btn2"):
+                try:
+                    r = batterie_piombo.capacita_effettiva_scarica(C_pk, t_pk, k_pk)
+                    st.session_state["_pb2_result"] = {"C_pk": C_pk, "t_pk": t_pk, "k_pk": k_pk, "res": r}
+                except (ValueError, ZeroDivisionError) as e:
+                    st.session_state["_pb2_result"] = None
+                    st.error(str(e))
+
+            rr = st.session_state.get("_pb2_result")
+            if rr:
+                r = rr["res"]
+                c1, c2 = st.columns(2)
+                c1.metric("Capacità effettiva", f"{r['C_eff_Ah']:.1f} Ah")
+                c2.metric("Corrente di scarica", f"{r['I_scarica_A']:.1f} A")
+                _export_csv_button(
+                    "Batterie e UPS — Piombo, capacità effettiva (Peukert)",
+                    {"C nominale 10h [Ah]": rr["C_pk"], "Tempo scarica [h]": rr["t_pk"], "k Peukert": rr["k_pk"],
+                     "C effettiva [Ah]": f"{r['C_eff_Ah']:.1f}", "I scarica [A]": f"{r['I_scarica_A']:.1f}"},
+                    key="pb2_export",
+                )
 
     elif tipo == "Dissipatore Termico":
         st.subheader("Calcolo Dissipatore Termico (IEC 60747 / JEDEC)")
@@ -6574,6 +6655,7 @@ elif categoria == "🌡️  Termotecnica & Impianti":
             "Serbatoi — Volume e Pressione",
             "Serbatoi — Svuotamento (Torricelli)",
             "Condotte Aria HVAC",
+            "Misuratori di Portata",
         ],
         key="termo_tool",
     )
@@ -7143,6 +7225,102 @@ elif categoria == "🌡️  Termotecnica & Impianti":
                     key="hrect_export",
                 )
 
+    elif tool_termo == "Misuratori di Portata":
+        st.subheader("Misuratori di Portata Industriali")
+        sub_mport = st.radio("Tipo di misuratore:", ["Diaframma tarato (ISO 5167)", "Turbina (K-factor)", "Elettromagnetico"], horizontal=True, key="mport_sub")
+
+        if sub_mport == "Diaframma tarato (ISO 5167)":
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                dP_mp = st.number_input("Caduta di pressione [mbar]:", value=250.0, min_value=0.1, key="mp_dP")
+                D_mp  = st.number_input("Diametro tubazione D [mm]:", value=100.0, min_value=1.0, key="mp_D")
+            with col2:
+                beta_mp = st.number_input("Rapporto diametri beta = d/D:", value=0.5, min_value=0.1, max_value=0.75, step=0.01, key="mp_beta")
+                rho_mp  = st.number_input("Densità fluido [kg/m³]:", value=1000.0, min_value=0.01, key="mp_rho")
+                mu_mp   = st.number_input("Viscosità dinamica [Pa·s]:", value=0.001, min_value=0.00001, step=0.0001, format="%.5f", key="mp_mu")
+            with col3:
+                C_mp   = st.number_input("Coefficiente di efflusso C:", value=0.6, min_value=0.1, step=0.01, key="mp_C")
+                eps_mp = st.number_input("Fattore di espansione eps:", value=1.0, min_value=0.1, max_value=1.0, step=0.01, key="mp_eps")
+                fluido_mp = st.selectbox("Tipo di fluido:", list(misuratori_portata.VELOCITA_CONSIGLIATA_MS.keys()), key="mp_fluido")
+            if st.button("Valuta Diaframma", key="mp_btn1"):
+                try:
+                    r = misuratori_portata.valuta_diaframma(dP_mp, D_mp, beta_mp, rho_mp, mu_mp, C_mp, eps_mp, fluido_mp)
+                    st.session_state["_mp1_result"] = r
+                except (ValueError, ZeroDivisionError) as e:
+                    st.session_state["_mp1_result"] = None
+                    st.error(str(e))
+
+            r = st.session_state.get("_mp1_result")
+            if r:
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Portata", f"{r['Q_m3h']:.2f} m³/h")
+                c2.metric("Velocità", f"{r['v_ms']:.2f} m/s")
+                c3.metric("Diametro foro", f"{r['d_foro_mm']:.1f} mm")
+                st.info(f"Re = {r['Re']:.0f} ({r['regime']}) — {'✅ valido per ISO 5167 (Re≥5000)' if r['valido_iso5167'] else '⚠️ Re troppo basso per ISO 5167 (serve Re≥5000)'}")
+                if r["nel_range"]:
+                    st.success(f"Velocità nel range consigliato per {r['tipo_fluido']} ({r['v_min_ms']}-{r['v_max_ms']} m/s).")
+                else:
+                    st.warning(f"Velocità fuori dal range consigliato per {r['tipo_fluido']} ({r['v_min_ms']}-{r['v_max_ms']} m/s).")
+                _export_csv_button(
+                    "Misuratori di Portata — Diaframma ISO 5167",
+                    {"dP [mbar]": dP_mp, "D [mm]": D_mp, "beta": beta_mp, "Fluido": fluido_mp,
+                     "Portata [m³/h]": f"{r['Q_m3h']:.2f}", "Velocità [m/s]": f"{r['v_ms']:.2f}", "Re": f"{r['Re']:.0f}"},
+                    key="mp1_export",
+                )
+
+        elif sub_mport == "Turbina (K-factor)":
+            col1, col2 = st.columns(2)
+            with col1:
+                freq_mp = st.number_input("Frequenza impulsi [Hz]:", value=50.0, min_value=0.01, key="mp_freq")
+            with col2:
+                k_mp = st.number_input("K-factor [impulsi/litro]:", value=100.0, min_value=0.01, key="mp_k")
+            if st.button("Calcola Portata Turbina", key="mp_btn2"):
+                try:
+                    r = misuratori_portata.portata_turbina(freq_mp, k_mp)
+                    st.session_state["_mp2_result"] = {"freq": freq_mp, "k": k_mp, "res": r}
+                except (ValueError, ZeroDivisionError) as e:
+                    st.session_state["_mp2_result"] = None
+                    st.error(str(e))
+
+            rr = st.session_state.get("_mp2_result")
+            if rr:
+                r = rr["res"]
+                c1, c2 = st.columns(2)
+                c1.metric("Portata", f"{r['Q_lmin']:.2f} L/min")
+                c2.metric("Portata", f"{r['Q_m3h']:.3f} m³/h")
+                _export_csv_button(
+                    "Misuratori di Portata — Turbina",
+                    {"Frequenza [Hz]": rr["freq"], "K-factor [imp/L]": rr["k"],
+                     "Portata [L/min]": f"{r['Q_lmin']:.2f}", "Portata [m³/h]": f"{r['Q_m3h']:.3f}"},
+                    key="mp2_export",
+                )
+
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                v_mp = st.number_input("Velocità media misurata [m/s]:", value=2.0, min_value=0.01, key="mp_v")
+            with col2:
+                D_mp2 = st.number_input("Diametro tubazione D [mm]:", value=100.0, min_value=1.0, key="mp_D2")
+            if st.button("Calcola Portata Elettromagnetico", key="mp_btn3"):
+                try:
+                    r = misuratori_portata.portata_elettromagnetico(v_mp, D_mp2)
+                    st.session_state["_mp3_result"] = {"v": v_mp, "D": D_mp2, "res": r}
+                except (ValueError, ZeroDivisionError) as e:
+                    st.session_state["_mp3_result"] = None
+                    st.error(str(e))
+
+            rr = st.session_state.get("_mp3_result")
+            if rr:
+                r = rr["res"]
+                c1, c2 = st.columns(2)
+                c1.metric("Portata", f"{r['Q_m3h']:.2f} m³/h")
+                c2.metric("Sezione tubazione", f"{r['A_m2']*1e4:.1f} cm²")
+                _export_csv_button(
+                    "Misuratori di Portata — Elettromagnetico",
+                    {"Velocità [m/s]": rr["v"], "D [mm]": rr["D"], "Portata [m³/h]": f"{r['Q_m3h']:.2f}"},
+                    key="mp3_export",
+                )
+
 
 elif categoria == "🔒  Sicurezza & Utilities":
     _card_open("sic", "🔒 Sicurezza & Utilities", "ISO 9612 / D.Lgs 81/2008")
@@ -7155,6 +7333,8 @@ elif categoria == "🔒  Sicurezza & Utilities":
             "Rumore — Attenuazione per Distanza",
             "Performance Level — EN ISO 13849",
             "Costi Energetici e Payback Efficientamento",
+            "Protezione Fulmini (LPS)",
+            "Antincendio — Rete Idranti/Naspi (UNI 10779)",
         ],
         key="sic_tool",
     )
@@ -7481,6 +7661,141 @@ elif categoria == "🔒  Sicurezza & Utilities":
                 "Payback [anni]": "∞" if rr["payback_anni"] == float("inf") else f"{rr['payback_anni']:.2f}",
             })
             _export_csv_button("Costi Energetici e Payback", dati_cen, key="cen_export")
+
+    elif tool_sic == "Protezione Fulmini (LPS)":
+        st.subheader("Protezione contro i fulmini — Valutazione semplificata (IEC 62305)")
+        st.caption(
+            "Valutazione semplificata Nd/Nc: confronta la frequenza di fulmini prevista sulla "
+            "struttura con quella tollerabile. Per un'analisi del rischio completa (perdite di "
+            "vite umane, servizio pubblico, patrimonio culturale, ecc.) fare riferimento a "
+            "IEC 62305-2 con un professionista abilitato."
+        )
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            L_lps = st.number_input("Lunghezza struttura [m]:", value=20.0, min_value=0.1, key="lps_L")
+            W_lps = st.number_input("Larghezza struttura [m]:", value=15.0, min_value=0.1, key="lps_W")
+        with col2:
+            H_lps = st.number_input("Altezza struttura [m]:", value=10.0, min_value=0.1, key="lps_H")
+            Ng_lps = st.number_input("Densità fulmini a terra Ng [fulmini/km²/anno]:", value=2.0, min_value=0.0, step=0.1, key="lps_Ng",
+                                      help="Da mappe di ceraunicità della zona; in Italia tipicamente 1-4.")
+        with col3:
+            Cd_lps = st.selectbox(
+                "Fattore di ubicazione Cd:",
+                [1.0, 0.5, 0.25, 2.0], key="lps_Cd",
+                format_func=lambda v: {
+                    1.0: "1 — struttura isolata in piano", 0.5: "0.5 — circondata da strutture più basse",
+                    0.25: "0.25 — circondata da strutture della stessa altezza o più alte",
+                    2.0: "2 — struttura isolata su altura",
+                }[v],
+            )
+            Nc_lps = st.number_input("Frequenza tollerabile Nc [fulmini/anno]:", value=0.001, min_value=0.0001, step=0.0001, format="%.4f", key="lps_Nc",
+                                      help="Valore di riferimento 10⁻³ per strutture ordinarie; un'analisi del rischio completa lo calcola caso per caso.")
+
+        if st.button("Valuta", key="lps_btn"):
+            try:
+                r = fulmini.valutazione_lps(L_lps, W_lps, H_lps, Ng_lps, Cd_lps, Nc_lps)
+                st.session_state["_lps_result"] = r
+            except ValueError as e:
+                st.session_state["_lps_result"] = None
+                st.error(str(e))
+
+        rr = st.session_state.get("_lps_result")
+        if rr:
+            c1, c2 = st.columns(2)
+            c1.metric("Area di raccolta equivalente", f"{rr['Ad_m2']:,.0f} m²")
+            c2.metric("Frequenza fulmini prevista Nd", f"{rr['Nd_fulmini_anno']:.5f} /anno")
+            if rr["protezione_necessaria"]:
+                st.warning(f"Protezione necessaria: Nd ({rr['Nd_fulmini_anno']:.5f}) > Nc ({rr['Nc_fulmini_anno']:.5f}).")
+                st.success(f"Livello di protezione minimo: **LPL {rr['livello']}** "
+                           f"(efficienza richiesta {rr['efficienza_richiesta_pct']:.1f}%)")
+                if not rr["raggiungibile_con_lps"]:
+                    st.error("Efficienza richiesta oltre il massimo garantito da un solo LPS (LPL I = 98%): "
+                             "servono misure di protezione aggiuntive (SPD, schermature, ecc.).")
+                c3, c4, c5 = st.columns(3)
+                c3.metric("Raggio sfera rotolante", f"{rr['raggio_sfera_rotolante_m']} m")
+                c4.metric("Lato maglia captatori", f"{rr['lato_maglia_m']} m")
+                c5.metric("Distanza max calate", f"{rr['distanza_max_calate_m']} m")
+            else:
+                st.info(f"Protezione non obbligatoria: Nd ({rr['Nd_fulmini_anno']:.5f}) ≤ Nc ({rr['Nc_fulmini_anno']:.5f}).")
+            _export_csv_button(
+                "Protezione Fulmini — Valutazione LPS",
+                {
+                    "Ad [m²]": f"{rr['Ad_m2']:.1f}", "Nd [fulmini/anno]": f"{rr['Nd_fulmini_anno']:.5f}",
+                    "Nc [fulmini/anno]": f"{rr['Nc_fulmini_anno']:.5f}",
+                    "Protezione necessaria": "Sì" if rr["protezione_necessaria"] else "No",
+                    "Livello LPL": rr.get("livello", "-"),
+                },
+                key="lps_export",
+            )
+
+    elif tool_sic == "Antincendio — Rete Idranti/Naspi (UNI 10779)":
+        st.subheader("Antincendio — Rete idranti/naspi (UNI 10779)")
+        st.caption(
+            "Valori tipici indicativi (UNI 10779): portata totale di rete per livello di rischio, "
+            "volume di riserva idrica e prevalenza minima della pompa. Per il progetto esecutivo "
+            "fare sempre riferimento a un professionista abilitato e alla norma vigente."
+        )
+        sub_ai = st.radio("Calcolo:", ["Dimensionamento completo", "Numero indicativo protezioni per area"], horizontal=True, key="ai_sub")
+
+        if sub_ai == "Dimensionamento completo":
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                tipo_ai = st.selectbox("Tipo di protezione:", list(antincendio.PARAMETRI_PROTEZIONE.keys()), key="ai_tipo")
+                liv_ai = st.selectbox("Livello di rischio:", [1, 2, 3], key="ai_liv",
+                                       format_func=lambda v: {1: "1 — basso", 2: "2 — medio", 3: "3 — alto"}[v])
+            with col2:
+                H_ai = st.number_input("Altezza geodetica riserva→apparecchio più sfavorito [m]:", value=15.0, min_value=0.0, key="ai_H")
+                perd_ai = st.number_input("Perdite di carico di rete stimate [bar]:", value=0.3, min_value=0.0, step=0.05, key="ai_perd")
+            with col3:
+                marg_ai = st.number_input("Margine di sicurezza [bar]:", value=0.5, min_value=0.0, step=0.05, key="ai_marg")
+            if st.button("Dimensiona Rete Antincendio", key="ai_btn1"):
+                try:
+                    r = antincendio.dimensionamento_completo(tipo_ai, liv_ai, H_ai, perd_ai, marg_ai)
+                    st.session_state["_ai1_result"] = r
+                except (ValueError, ZeroDivisionError) as e:
+                    st.session_state["_ai1_result"] = None
+                    st.error(str(e))
+
+            r = st.session_state.get("_ai1_result")
+            if r:
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Portata totale rete", f"{r['Q_tot_lmin']:.0f} L/min")
+                c2.metric("Volume riserva idrica", f"{r['V_m3']:.1f} m³")
+                c3.metric("Prevalenza minima pompa", f"{r['H_pompa_bar']:.2f} bar")
+                st.info(f"{r['n_contemporanei']} apparecchi contemporanei ({r['Q_singola_lmin']:.0f} L/min cad.) "
+                        f"per {r['durata_min']} min — pressione minima {r['P_min_bar']:.1f} bar all'apparecchio più sfavorito.")
+                _export_csv_button(
+                    "Antincendio — Dimensionamento rete",
+                    {"Tipo protezione": tipo_ai, "Livello rischio": liv_ai,
+                     "Portata totale [L/min]": f"{r['Q_tot_lmin']:.0f}", "Volume riserva [m³]": f"{r['V_m3']:.1f}",
+                     "Prevalenza pompa [bar]": f"{r['H_pompa_bar']:.2f}"},
+                    key="ai1_export",
+                )
+
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                area_ai = st.number_input("Area da proteggere [m²]:", value=2000.0, min_value=1.0, key="ai_area")
+            with col2:
+                inter_ai = st.number_input("Interasse tipico tra apparecchi [m]:", value=45.0, min_value=1.0, key="ai_inter",
+                                            help="Tipico 45m per naspi/idranti UNI45 interni, fino a 60m per idranti UNI70 esterni.")
+            if st.button("Stima Numero Protezioni", key="ai_btn2"):
+                try:
+                    r = antincendio.numero_protezioni_area(area_ai, inter_ai)
+                    st.session_state["_ai2_result"] = r
+                except (ValueError, ZeroDivisionError) as e:
+                    st.session_state["_ai2_result"] = None
+                    st.error(str(e))
+
+            r = st.session_state.get("_ai2_result")
+            if r:
+                st.metric("Numero indicativo di apparecchi", f"{r['n_protezioni_stimato']}")
+                st.caption("Stima grossolana a griglia quadrata: non sostituisce la verifica del raggio d'azione reale sulla planimetria.")
+                _export_csv_button(
+                    "Antincendio — Numero protezioni per area",
+                    {"Area [m²]": area_ai, "Interasse [m]": inter_ai, "N. protezioni stimato": r["n_protezioni_stimato"]},
+                    key="ai2_export",
+                )
 
 
 elif categoria == "🎛️  Mark VI/VIe & ToolboxST":

@@ -8,6 +8,24 @@ Le versioni precedenti alla v28 sono state sviluppate prima dell'adozione di Git
 progetto: non hanno un tag corrispondente (nessun commit storico disponibile), ma sono
 documentate qui per completezza.
 
+## [v62] - 2026-07-09
+### Added
+- Nuovo modulo **Protezione fulmini (LPS)** — valutazione semplificata Nd/Nc (IEC 62305) con
+  area di raccolta equivalente, livello di protezione LPL minimo e parametri dell'impianto
+  (sfera rotolante, maglia, calate), disponibile in Streamlit (Sicurezza & Utilities) e PWA.
+- Nuovo modulo **Batterie al piombo — complementi avanzati (UPS statiche)**: correzione IEEE
+  485 per temperatura, numero di celle in serie, tensione di fine scarica e capacità effettiva
+  secondo la legge di Peukert. Si appoggia al dimensionamento di base già esistente
+  (`batterie_ups.dimensiona_banco`) invece di duplicarlo con una formula diversa.
+- Nuovo modulo **Misuratori di portata industriali**: diaframma tarato (ISO 5167-2, con verifica
+  di Reynolds e velocità consigliata), misuratore a turbina (K-factor) ed elettromagnetico.
+- Nuovo modulo **Antincendio — rete idranti/naspi (UNI 10779)**: portata totale di rete per
+  livello di rischio, volume di riserva idrica, prevalenza minima pompa e stima indicativa del
+  numero di protezioni per area.
+### Fixed
+- `web.py`: le voci "Protezione Fulmini (LPS)" e "Antincendio" mancavano nell'indice di ricerca
+  della sidebar (introdotta in v34): aggiunte per renderle trovabili dalla ricerca.
+
 ## [v57] - 2026-07-08
 ### Fixed
 - Crash `KeyError` in produzione sulla Conversione Grandezze Vibrazionali (Streamlit): il

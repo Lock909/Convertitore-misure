@@ -4,6 +4,10 @@ import unittest
 import automazione
 import formule
 import idraulica
+import fulmini
+import batterie_piombo as bpb
+import misuratori_portata as mport
+import antincendio as ai
 import vibrazioni
 import pneumatica
 import trasmissioni
@@ -2470,6 +2474,237 @@ class TestBackupCompat(unittest.TestCase):
             cpas.diodo_zener_regolatore(5, 6, 100, 100)  # Vz >= Vin
         with self.assertRaises(ValueError):
             cpas.diodo_zener_regolatore(12, 5.1, 0, 1000)
+
+
+class TestFulmini(unittest.TestCase):
+    def test_area_raccolta_equivalente(self):
+        r = fulmini.area_raccolta_equivalente(20.0, 15.0, 10.0)
+        # Ad = L*W + 2*(3H)*(L+W) + pi*(3H)^2
+        atteso = 20 * 15 + 2 * 30 * 35 + math.pi * 30**2
+        self.assertAlmostEqual(r["Ad_m2"], atteso, places=4)
+
+    def test_area_raccolta_validazioni(self):
+        with self.assertRaises(ValueError):
+            fulmini.area_raccolta_equivalente(0, 10, 5)
+
+    def test_frequenza_fulmini_prevista(self):
+        r = fulmini.frequenza_fulmini_prevista(2.0, 5227.433388, 1.0)
+        self.assertAlmostEqual(r["Nd_fulmini_anno"], 0.010454867, places=6)
+
+    def test_valuta_necessita_protezione_necessaria(self):
+        r = fulmini.valuta_necessita_protezione(0.010454867, 1e-3)
+        self.assertTrue(r["protezione_necessaria"])
+        self.assertAlmostEqual(r["efficienza_richiesta"], 0.904347, places=4)
+
+    def test_valuta_necessita_protezione_non_necessaria(self):
+        r = fulmini.valuta_necessita_protezione(1e-4, 1e-3)
+        self.assertFalse(r["protezione_necessaria"])
+
+    def test_livello_protezione_da_efficienza(self):
+        r = fulmini.livello_protezione_da_efficienza(0.904347)
+        self.assertEqual(r["livello"], "II")
+
+    def test_livello_protezione_lpl_iv_sufficiente(self):
+        r = fulmini.livello_protezione_da_efficienza(0.5)
+        self.assertEqual(r["livello"], "IV")
+
+    def test_livello_protezione_oltre_lpl_i(self):
+        r = fulmini.livello_protezione_da_efficienza(0.99)
+        self.assertEqual(r["livello"], "I")
+        self.assertFalse(r["raggiungibile_con_lps"])
+
+    def test_parametri_lps(self):
+        r = fulmini.parametri_lps("II")
+        self.assertEqual(r["raggio_sfera_rotolante_m"], 30)
+        self.assertEqual(r["lato_maglia_m"], 10)
+
+    def test_parametri_lps_non_valido(self):
+        with self.assertRaises(ValueError):
+            fulmini.parametri_lps("V")
+
+    def test_valutazione_lps_completa(self):
+        r = fulmini.valutazione_lps(20.0, 15.0, 10.0, 2.0, 1.0, 1e-3)
+        self.assertAlmostEqual(r["Ad_m2"], 5227.433388, places=4)
+        self.assertTrue(r["protezione_necessaria"])
+        self.assertEqual(r["livello"], "II")
+        self.assertEqual(r["raggio_sfera_rotolante_m"], 30)
+
+    def test_valutazione_lps_non_necessaria_senza_livello(self):
+        r = fulmini.valutazione_lps(5.0, 5.0, 3.0, 0.5, 1.0, 1e-3)
+        self.assertFalse(r["protezione_necessaria"])
+        self.assertNotIn("livello", r)
+
+
+class TestBatteriePiombo(unittest.TestCase):
+    def test_fattore_temperatura_valori_tabella(self):
+        self.assertAlmostEqual(bpb.fattore_temperatura_piombo(25.0), 1.00)
+        self.assertAlmostEqual(bpb.fattore_temperatura_piombo(20.0), 1.04)
+        self.assertAlmostEqual(bpb.fattore_temperatura_piombo(0.0), 1.59)
+        self.assertAlmostEqual(bpb.fattore_temperatura_piombo(40.0), 0.87)
+
+    def test_fattore_temperatura_saturazione(self):
+        self.assertAlmostEqual(bpb.fattore_temperatura_piombo(-10.0), 1.59)
+        self.assertAlmostEqual(bpb.fattore_temperatura_piombo(50.0), 0.87)
+
+    def test_fattore_temperatura_interpolazione(self):
+        # a meta' tra 20 (1.04) e 25 (1.00) -> 1.02
+        self.assertAlmostEqual(bpb.fattore_temperatura_piombo(22.5), 1.02, places=6)
+
+    def test_numero_celle_serie(self):
+        r = bpb.numero_celle_serie(48.0, 2.0)
+        self.assertEqual(r["n_celle"], 24)
+        self.assertAlmostEqual(r["V_bus_effettiva"], 48.0)
+
+    def test_numero_celle_serie_arrotonda_per_eccesso(self):
+        r = bpb.numero_celle_serie(49.0, 2.0)
+        self.assertEqual(r["n_celle"], 25)
+
+    def test_tensione_fine_scarica(self):
+        r = bpb.tensione_fine_scarica(24, 1.75)
+        self.assertAlmostEqual(r["V_fine_scarica_bus"], 42.0)
+
+    def test_capacita_effettiva_scarica(self):
+        r = bpb.capacita_effettiva_scarica(100.0, 0.5, 1.3)
+        self.assertAlmostEqual(r["C_eff_Ah"], 50.09130066684767, places=4)
+        self.assertLess(r["C_eff_Ah"], 100.0)
+
+    def test_capacita_effettiva_scarica_10h_uguale_nominale(self):
+        r = bpb.capacita_effettiva_scarica(100.0, 10.0, 1.3)
+        self.assertAlmostEqual(r["C_eff_Ah"], 100.0, places=6)
+
+    def test_dimensionamento_completo(self):
+        r = bpb.dimensionamento_completo(5000.0, 0.5, 48.0, 0.90, 0.80, 1.25, 20.0, 0.10)
+        self.assertEqual(r["n_celle"], 24)
+        self.assertAlmostEqual(r["V_fine_scarica_bus"], 42.0)
+        self.assertAlmostEqual(r["C_nominale_Ah"], 90.4224537037037, places=4)
+        self.assertAlmostEqual(r["Ah_corretti_temperatura"], 94.03935185185185, places=4)
+        self.assertAlmostEqual(r["I_carica_A"], 9.403935185185185, places=4)
+
+    def test_dimensionamento_completo_usa_batterie_ups_per_base(self):
+        # La base (C_nominale_Ah) deve coincidere con batterie_ups.dimensiona_banco,
+        # per evitare due formule diverse per lo stesso calcolo nell'app.
+        base = bat.dimensiona_banco(5000.0, 0.5, 48.0, eta_inverter=0.90, DOD=0.80, fattore_invecchiamento=1.25)
+        r = bpb.dimensionamento_completo(5000.0, 0.5, 48.0, 0.90, 0.80, 1.25, 20.0, 0.10)
+        self.assertAlmostEqual(r["C_nominale_Ah"], base["C_nominale_Ah"], places=9)
+
+
+class TestMisuratoriPortata(unittest.TestCase):
+    def test_portata_diaframma_iso5167(self):
+        r = mport.portata_diaframma_iso5167(250, 100, 0.5, 1000, 0.6, 1.0)
+        self.assertAlmostEqual(r["Q_m3h"], 30.972980931545575, places=6)
+        self.assertAlmostEqual(r["v_ms"], 1.0954451150103324, places=6)
+        self.assertAlmostEqual(r["d_foro_mm"], 50.0)
+
+    def test_portata_diaframma_validazioni(self):
+        with self.assertRaises(ValueError):
+            mport.portata_diaframma_iso5167(0, 100, 0.5, 1000)
+        with self.assertRaises(ValueError):
+            mport.portata_diaframma_iso5167(250, 0, 0.5, 1000)
+        with self.assertRaises(ValueError):
+            mport.portata_diaframma_iso5167(250, 100, 0.05, 1000)
+        with self.assertRaises(ValueError):
+            mport.portata_diaframma_iso5167(250, 100, 0.9, 1000)
+        with self.assertRaises(ValueError):
+            mport.portata_diaframma_iso5167(250, 100, 0.5, 0)
+
+    def test_portata_turbina(self):
+        r = mport.portata_turbina(50, 100)
+        self.assertAlmostEqual(r["Q_lmin"], 30.0)
+        self.assertAlmostEqual(r["Q_m3h"], 1.8)
+
+    def test_portata_turbina_validazioni(self):
+        with self.assertRaises(ValueError):
+            mport.portata_turbina(0, 100)
+        with self.assertRaises(ValueError):
+            mport.portata_turbina(50, 0)
+
+    def test_portata_elettromagnetico(self):
+        r = mport.portata_elettromagnetico(2.0, 100)
+        self.assertAlmostEqual(r["Q_m3h"], 56.54866776461628, places=6)
+        self.assertAlmostEqual(r["A_m2"], 0.007853981633974483, places=9)
+
+    def test_numero_reynolds_turbolento(self):
+        r = mport.numero_reynolds(2.0, 100, 1000, 0.001)
+        self.assertAlmostEqual(r["Re"], 200000.0, places=3)
+        self.assertEqual(r["regime"], "turbolento")
+        self.assertTrue(r["valido_iso5167"])
+
+    def test_numero_reynolds_laminare(self):
+        r = mport.numero_reynolds(0.001, 10, 1000, 0.001)
+        self.assertEqual(r["regime"], "laminare")
+        self.assertFalse(r["valido_iso5167"])
+
+    def test_verifica_velocita_consigliata_nel_range(self):
+        r = mport.verifica_velocita_consigliata(2.0, "acqua")
+        self.assertTrue(r["nel_range"])
+
+    def test_verifica_velocita_consigliata_fuori_range(self):
+        r = mport.verifica_velocita_consigliata(10.0, "acqua")
+        self.assertFalse(r["nel_range"])
+
+    def test_verifica_velocita_tipo_non_valido(self):
+        with self.assertRaises(ValueError):
+            mport.verifica_velocita_consigliata(2.0, "mercurio")
+
+    def test_valuta_diaframma(self):
+        r = mport.valuta_diaframma(250, 100, 0.5, 1000, 0.001, 0.6, 1.0, "acqua")
+        self.assertAlmostEqual(r["Q_m3h"], 30.972980931545575, places=6)
+        self.assertAlmostEqual(r["Re"], 109544.51150103324, places=3)
+        self.assertEqual(r["regime"], "turbolento")
+        self.assertTrue(r["valido_iso5167"])
+        self.assertTrue(r["nel_range"])
+
+
+class TestAntincendio(unittest.TestCase):
+    def test_portata_rete_totale(self):
+        r = ai.portata_rete_totale("idrante_UNI45", 2)
+        self.assertAlmostEqual(r["Q_tot_lmin"], 360.0)
+        self.assertAlmostEqual(r["Q_tot_m3h"], 21.6)
+        self.assertEqual(r["n_contemporanei"], 3)
+        self.assertEqual(r["durata_min"], 60)
+
+    def test_portata_rete_totale_validazioni(self):
+        with self.assertRaises(ValueError):
+            ai.portata_rete_totale("idrante_UNI999", 2)
+        with self.assertRaises(ValueError):
+            ai.portata_rete_totale("idrante_UNI45", 5)
+
+    def test_volume_riserva_idrica(self):
+        r = ai.volume_riserva_idrica(360.0, 60)
+        self.assertAlmostEqual(r["V_m3"], 21.6)
+        self.assertAlmostEqual(r["V_l"], 21600.0)
+
+    def test_volume_riserva_validazioni(self):
+        with self.assertRaises(ValueError):
+            ai.volume_riserva_idrica(0, 60)
+        with self.assertRaises(ValueError):
+            ai.volume_riserva_idrica(360, 0)
+
+    def test_prevalenza_pompa(self):
+        r = ai.prevalenza_pompa(2.0, 15.0, 0.3, 0.5)
+        self.assertAlmostEqual(r["H_geodetica_bar"], 1.4710208884966167, places=6)
+        self.assertAlmostEqual(r["H_pompa_bar"], 4.271020888496617, places=6)
+        self.assertAlmostEqual(r["H_pompa_m"], 43.5516, places=3)
+
+    def test_prevalenza_pompa_validazioni(self):
+        with self.assertRaises(ValueError):
+            ai.prevalenza_pompa(0, 15.0)
+        with self.assertRaises(ValueError):
+            ai.prevalenza_pompa(2.0, -1.0)
+
+    def test_numero_protezioni_area(self):
+        r = ai.numero_protezioni_area(5000, 45)
+        self.assertEqual(r["n_protezioni_stimato"], 3)
+
+    def test_numero_protezioni_area_minimo_uno(self):
+        r = ai.numero_protezioni_area(100, 45)
+        self.assertEqual(r["n_protezioni_stimato"], 1)
+
+    def test_dimensionamento_completo(self):
+        r = ai.dimensionamento_completo("idrante_UNI45", 2, 15.0, 0.3, 0.5)
+        self.assertAlmostEqual(r["Q_tot_lmin"], 360.0)
+        self.assertAlmostEqual(r["V_m3"], 21.6)
+        self.assertAlmostEqual(r["H_pompa_bar"], 4.271020888496617, places=6)
 
 
 if __name__ == "__main__":

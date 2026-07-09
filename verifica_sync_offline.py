@@ -72,6 +72,10 @@ MODULI_DUPLICATI = [
     "performance_level.py",
     "automazione.py",
     "idraulica.py",
+    "fulmini.py",
+    "batterie_piombo.py",
+    "misuratori_portata.py",
+    "antincendio.py",
 ]
 
 

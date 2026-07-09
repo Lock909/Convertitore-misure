@@ -61,6 +61,10 @@ import performance_level
 import automazione
 import idraulica
 import strumentazione
+import fulmini
+import batterie_piombo
+import misuratori_portata
+import antincendio
 
 
 def _err(msg: str) -> dict:
@@ -1967,3 +1971,83 @@ def strum_caratterizza_offset_tc(punti_json, tipo):
 
 def strum_tipi_termocoppia_diretta():
     return {"tipi": strumentazione.tipi_termocoppia_diretta()}
+
+
+# ------------------------------------------------------------------ Protezione fulmini (LPS)
+
+def fulmini_valutazione_lps(L_m, W_m, H_m, Ng_fulmini_km2_anno, Cd, Nc_fulmini_anno):
+    try:
+        return _sanifica(fulmini.valutazione_lps(
+            float(L_m), float(W_m), float(H_m), float(Ng_fulmini_km2_anno),
+            float(Cd), float(Nc_fulmini_anno)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+# ------------------------------------------------------------------ Batterie al piombo (UPS)
+
+def piombo_dimensionamento_completo(P_carico_W, t_autonomia_h, V_bus_dc,
+                                     rendimento_inverter, DOD, fattore_invecchiamento,
+                                     T_amb_C, tasso_carica_c):
+    try:
+        return _sanifica(batterie_piombo.dimensionamento_completo(
+            float(P_carico_W), float(t_autonomia_h), float(V_bus_dc),
+            float(rendimento_inverter), float(DOD), float(fattore_invecchiamento),
+            float(T_amb_C), float(tasso_carica_c)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def piombo_capacita_effettiva_scarica(C_nom_10h_Ah, t_scarica_h, k_peukert):
+    try:
+        return _sanifica(batterie_piombo.capacita_effettiva_scarica(
+            float(C_nom_10h_Ah), float(t_scarica_h), float(k_peukert)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+# ------------------------------------------------------------------ Misuratori di portata
+
+def misuratori_valuta_diaframma(dP_mbar, D_mm, beta, rho_kgm3, mu_Pas, C, eps, tipo_fluido):
+    try:
+        return _sanifica(misuratori_portata.valuta_diaframma(
+            float(dP_mbar), float(D_mm), float(beta), float(rho_kgm3), float(mu_Pas),
+            float(C), float(eps), tipo_fluido))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def misuratori_portata_turbina(freq_Hz, k_factor_imp_l):
+    try:
+        return _sanifica(misuratori_portata.portata_turbina(
+            float(freq_Hz), float(k_factor_imp_l)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def misuratori_portata_elettromagnetico(v_ms, D_mm):
+    try:
+        return _sanifica(misuratori_portata.portata_elettromagnetico(
+            float(v_ms), float(D_mm)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+# ------------------------------------------------------------------ Antincendio (UNI 10779)
+
+def antincendio_dimensionamento_completo(tipo_protezione, livello_rischio, altezza_geodetica_m,
+                                          perdite_carico_bar, margine_bar):
+    try:
+        return _sanifica(antincendio.dimensionamento_completo(
+            tipo_protezione, int(livello_rischio), float(altezza_geodetica_m),
+            float(perdite_carico_bar), float(margine_bar)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def antincendio_numero_protezioni_area(area_m2, interasse_m):
+    try:
+        return _sanifica(antincendio.numero_protezioni_area(
+            float(area_m2), float(interasse_m)))
+    except ValueError as e:
+        return _err(str(e))
