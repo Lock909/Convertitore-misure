@@ -4,8 +4,8 @@
 // una sola visita con connessione attiva.
 // ==============================================================================
 
-const CACHE_APP = "calc-industriale-app-v62";
-const CACHE_RUNTIME = "calc-industriale-runtime-v62";
+const CACHE_APP = "calc-industriale-app-v67";
+const CACHE_RUNTIME = "calc-industriale-runtime-v67";
 
 // Nota: niente "./" in questa lista — il server Streamlit (/app/static/...) non
 // serve l'indice di directory e un singolo 404 farebbe fallire l'intero addAll.
@@ -74,7 +74,12 @@ const ASSET_APP = [
   "./py/performance_level.py",
   "./py/automazione.py",
   "./py/idraulica.py",
+  "./py/fulmini.py",
+  "./py/batterie_piombo.py",
+  "./py/misuratori_portata.py",
+  "./py/antincendio.py",
   "./py/bridge.py",
+  "./CHANGELOG.md",
 ];
 
 // Asset esterni (CDN) necessari per l'uso offline completo: motore Pyodide,
