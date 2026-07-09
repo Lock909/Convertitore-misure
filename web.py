@@ -697,21 +697,27 @@ def _analizza_sezioni_blocco(blocco: str) -> list:
 
 
 def _elenca_blocchi_changelog(testo: str) -> list:
-    """Ritorna [(numero_versione, testo_blocco), ...] per ogni blocco
-    "## [vN] - data" trovato nel changelog, nell'ordine in cui compaiono nel file."""
-    match_iter = list(re.finditer(r"^## \[v(\d+)\]", testo, re.MULTILINE))
+    """Ritorna [(numero_versione, etichetta, testo_blocco), ...] per ogni
+    blocco "## [vN] - data" trovato nel changelog, nell'ordine in cui
+    compaiono nel file. Gestisce anche l'intestazione speciale
+    "## [v1] - [v28]" (storico pre-Git, raggruppato in un unico blocco):
+    l'etichetta mostra l'intero intervallo, mentre il numero resta quello
+    singolo usato per ordinare/confrontare."""
+    match_iter = list(re.finditer(r"^## \[v(\d+)\](?:\s*-\s*\[v(\d+)\])?", testo, re.MULTILINE))
     blocchi = []
     for i, m in enumerate(match_iter):
         fine = match_iter[i + 1].start() if i + 1 < len(match_iter) else len(testo)
-        blocchi.append((int(m.group(1)), testo[m.start():fine]))
+        numero = int(m.group(1))
+        etichetta = f"v{m.group(1)}–v{m.group(2)}" if m.group(2) else f"v{numero}"
+        blocchi.append((numero, etichetta, testo[m.start():fine]))
     return blocchi
 
 
 def _estrai_novita_intervallo(versione_vista, versione_corrente: str) -> list:
-    """Ritorna [(numero_versione, sezioni), ...] per ogni versione tra
-    versione_vista (esclusa) e versione_corrente (inclusa), dalla più recente
-    alla più vecchia — copre chi ha saltato più di un aggiornamento. Se
-    versione_vista manca/non è valida o l'intervallo risulta vuoto, ricade
+    """Ritorna [(numero_versione, etichetta, sezioni), ...] per ogni versione
+    tra versione_vista (esclusa) e versione_corrente (inclusa), dalla più
+    recente alla più vecchia — copre chi ha saltato più di un aggiornamento.
+    Se versione_vista manca/non è valida o l'intervallo risulta vuoto, ricade
     sulla sola versione corrente."""
     try:
         testo = open(_CHANGELOG_PATH, "r", encoding="utf-8").read()
@@ -724,26 +730,27 @@ def _estrai_novita_intervallo(versione_vista, versione_corrente: str) -> list:
     if versione_vista:
         try:
             vista = int(versione_vista)
-            selezionati = [(n, b) for n, b in blocchi if vista < n <= corrente]
+            selezionati = [(n, e, b) for n, e, b in blocchi if vista < n <= corrente]
         except ValueError:
             selezionati = []
     if not selezionati:
-        selezionati = [(n, b) for n, b in blocchi if n == corrente]
+        selezionati = [(n, e, b) for n, e, b in blocchi if n == corrente]
 
     selezionati.sort(key=lambda x: x[0], reverse=True)
-    return [(n, _analizza_sezioni_blocco(b)) for n, b in selezionati]
+    return [(n, e, _analizza_sezioni_blocco(b)) for n, e, b in selezionati]
 
 
 def _elenca_tutte_le_versioni() -> list:
-    """Ritorna [(numero_versione, sezioni), ...] per OGNI blocco del changelog,
-    dalla più recente alla più vecchia — per la vista "Cronologia versioni"."""
+    """Ritorna [(numero_versione, etichetta, sezioni), ...] per OGNI blocco
+    del changelog, dalla più recente alla più vecchia — per la vista
+    "Cronologia versioni"."""
     try:
         testo = open(_CHANGELOG_PATH, "r", encoding="utf-8").read()
     except OSError:
         return []
     blocchi = _elenca_blocchi_changelog(testo)
     blocchi.sort(key=lambda x: x[0], reverse=True)
-    return [(n, _analizza_sezioni_blocco(b)) for n, b in blocchi]
+    return [(n, e, _analizza_sezioni_blocco(b)) for n, e, b in blocchi]
 
 
 def _scrivi_cookie_versione_vista(versione: str) -> None:
@@ -813,9 +820,9 @@ def _mostra_banner_novita() -> None:
         f"**✨ Novità dalla versione v{vista_cookie} alla v{versione}**\n\n" if multiplo
         else f"**✨ Novità della versione v{versione}**\n\n"
     )
-    for num_v, sezioni in blocchi:
+    for _num_v, etichetta_v, sezioni in blocchi:
         if multiplo:
-            testo_md += f"**v{num_v}**\n"
+            testo_md += f"**{etichetta_v}**\n"
         for nome_sez, bullet in sezioni:
             etichetta = _NOMI_SEZIONE_CHANGELOG.get(nome_sez, nome_sez)
             if etichetta:
@@ -8669,8 +8676,8 @@ elif categoria == "📁  Progetti Salvati":
     st.subheader("🕘 Cronologia versioni")
     st.caption("Novità di ogni versione dell'app, dalla più recente alla più vecchia — utile per "
                "ricontrollare cosa è cambiato senza aspettare il banner mostrato dopo un aggiornamento.")
-    for _num_v, _sezioni_v in _elenca_tutte_le_versioni():
-        with st.expander(f"v{_num_v}"):
+    for _num_v, _etichetta_v, _sezioni_v in _elenca_tutte_le_versioni():
+        with st.expander(_etichetta_v):
             for _nome_sez, _bullet in _sezioni_v:
                 _etichetta = _NOMI_SEZIONE_CHANGELOG.get(_nome_sez, _nome_sez)
                 if _etichetta:

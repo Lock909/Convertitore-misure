@@ -1526,7 +1526,7 @@ function renderCronologiaVersioni() {
         const intestazione = document.createElement("div");
         intestazione.className = "card-voce-intestazione";
         const strong = document.createElement("strong");
-        strong.textContent = `v${blocco.versione}`;
+        strong.textContent = blocco.etichetta;
         intestazione.appendChild(strong);
         card.appendChild(intestazione);
 
@@ -1834,15 +1834,19 @@ function _analizzaSezioniBlocco(blocco) {
 // Individua tutti i blocchi "## [vN] - data" di un testo CHANGELOG.md e le
 // relative sezioni/bullet già analizzate.
 function _elencaBlocchiChangelog(testoChangelog) {
-  const regex = /^## \[v(\d+)\]/gm;
+  // Cattura anche l'intestazione speciale "## [v1] - [v28]" (storico pre-Git,
+  // raggruppato in un unico blocco): l'etichetta mostra l'intero intervallo,
+  // mentre "versione" resta il numero singolo usato per ordinare/confrontare.
+  const regex = /^## \[v(\d+)\](?:\s*-\s*\[v(\d+)\])?/gm;
   const posizioni = [];
   let match;
   while ((match = regex.exec(testoChangelog)) !== null) {
-    posizioni.push({ versione: match[1], inizio: match.index });
+    const etichetta = match[2] ? `v${match[1]}–v${match[2]}` : `v${match[1]}`;
+    posizioni.push({ versione: match[1], etichetta, inizio: match.index });
   }
   return posizioni.map((p, i) => {
     const fine = i + 1 < posizioni.length ? posizioni[i + 1].inizio : testoChangelog.length;
-    return { versione: p.versione, sezioni: _analizzaSezioniBlocco(testoChangelog.slice(p.inizio, fine)) };
+    return { versione: p.versione, etichetta: p.etichetta, sezioni: _analizzaSezioniBlocco(testoChangelog.slice(p.inizio, fine)) };
   });
 }
 
@@ -1931,7 +1935,7 @@ async function mostraBannerNovita() {
     if (multiplo) {
       const hv = document.createElement("div");
       hv.className = "banner-novita-versione";
-      hv.textContent = `v${blocco.versione}`;
+      hv.textContent = blocco.etichetta;
       corpo.appendChild(hv);
     }
     for (const sez of blocco.sezioni) {
