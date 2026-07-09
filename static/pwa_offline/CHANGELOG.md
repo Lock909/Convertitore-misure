@@ -8,6 +8,12 @@ Le versioni precedenti alla v28 sono state sviluppate prima dell'adozione di Git
 progetto: non hanno un tag corrispondente (nessun commit storico disponibile), ma sono
 documentate qui per completezza.
 
+## [v68] - 2026-07-09
+### Changed
+- Il banner "cosa è cambiato" ora copre tutte le versioni intercorse dall'ultima vista (non
+  solo l'ultima): chi non apre l'app per un po' e salta più di un aggiornamento vede l'elenco
+  completo delle novità, raggruppate per versione dalla più recente alla più vecchia.
+
 ## [v67] - 2026-07-09
 ### Added
 - Banner "cosa è cambiato" mostrato una volta sola dopo un aggiornamento, sia in Streamlit

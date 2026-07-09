@@ -4,7 +4,7 @@
 // i form a partire da CALCOLATORI (calcolatori.js) e mostra i risultati.
 // ==============================================================================
 
-const VERSIONE_APP = "67";
+const VERSIONE_APP = "68";
 
 const FILE_PY = [
   "costanti.py", "formule.py", "portata_cavo.py", "batterie_litio.py",
@@ -1738,17 +1738,11 @@ function mostraBannerAggiornamento() {
 
 const NOMI_SEZIONE_CHANGELOG = { Added: "Aggiunte", Changed: "Modifiche", Fixed: "Correzioni", Removed: "Rimozioni" };
 
-// Estrae le sezioni "### Categoria" / bullet "- ..." del blocco "## [vN]" per
-// la versione data da un testo CHANGELOG.md. Gestisce bullet su più righe
+// Estrae le sezioni "### Categoria" / bullet "- ..." di UN blocco versione
+// (testo che parte da "## [vN] - data"). Gestisce bullet su più righe
 // (continuazione: riga che non inizia con "-" né "#" viene accodata al
 // bullet precedente, come nel formato usato dal changelog di questo progetto).
-function _estraiNoteVersione(testoChangelog, versione) {
-  const marker = `## [v${versione}]`;
-  const inizio = testoChangelog.indexOf(marker);
-  if (inizio === -1) return null;
-  const fine = testoChangelog.indexOf("\n## [", inizio + marker.length);
-  const blocco = fine === -1 ? testoChangelog.slice(inizio) : testoChangelog.slice(inizio, fine);
-
+function _analizzaSezioniBlocco(blocco) {
   const sezioni = [];
   let sezioneCorrente = null;
   for (const riga of blocco.split("\n").slice(1)) {
@@ -1768,16 +1762,62 @@ function _estraiNoteVersione(testoChangelog, versione) {
   return sezioni;
 }
 
+// Individua tutti i blocchi "## [vN] - data" di un testo CHANGELOG.md e le
+// relative sezioni/bullet già analizzate.
+function _elencaBlocchiChangelog(testoChangelog) {
+  const regex = /^## \[v(\d+)\]/gm;
+  const posizioni = [];
+  let match;
+  while ((match = regex.exec(testoChangelog)) !== null) {
+    posizioni.push({ versione: match[1], inizio: match.index });
+  }
+  return posizioni.map((p, i) => {
+    const fine = i + 1 < posizioni.length ? posizioni[i + 1].inizio : testoChangelog.length;
+    return { versione: p.versione, sezioni: _analizzaSezioniBlocco(testoChangelog.slice(p.inizio, fine)) };
+  });
+}
+
+// Ritorna i blocchi con versione > versioneVista e <= versioneCorrente
+// (confronto numerico, per coprire chi ha saltato più aggiornamenti),
+// ordinati dal più recente al più vecchio. Se versioneVista manca/non è
+// valida o l'intervallo risulta vuoto, ricade sul solo blocco corrente.
+function _estraiNoteIntervallo(testoChangelog, versioneVista, versioneCorrente) {
+  const blocchi = _elencaBlocchiChangelog(testoChangelog);
+  const corrente = parseInt(versioneCorrente, 10);
+  const vista = versioneVista != null ? parseInt(versioneVista, 10) : NaN;
+
+  let selezionati = !isNaN(vista)
+    ? blocchi.filter(b => { const n = parseInt(b.versione, 10); return n > vista && n <= corrente; })
+    : [];
+  if (selezionati.length === 0) {
+    selezionati = blocchi.filter(b => b.versione === String(corrente));
+  }
+  selezionati.sort((a, b) => parseInt(b.versione, 10) - parseInt(a.versione, 10));
+  return selezionati;
+}
+
 // Banner "cosa è cambiato" mostrato una volta per versione (localStorage),
 // dopo un aggiornamento a una nuova VERSIONE_APP. A differenza di
 // mostraBannerAggiornamento() (che avvisa mentre una versione più recente è
-// già disponibile in background) questo mostra le novità della versione
-// appena caricata, prese da CHANGELOG.md.
+// già disponibile in background) questo mostra le novità delle versioni
+// intercorse dall'ultima aperta, prese da CHANGELOG.md — utile per chi non
+// apre l'app per un po' e salta più di un aggiornamento.
 async function mostraBannerNovita() {
   if (document.getElementById("banner-novita")) return;
   let vista;
   try { vista = localStorage.getItem(CHIAVE_ULTIMA_VERSIONE_VISTA); } catch (e) { vista = null; }
   if (vista === VERSIONE_APP) return;
+
+  const segnaComeVista = () => {
+    try { localStorage.setItem(CHIAVE_ULTIMA_VERSIONE_VISTA, VERSIONE_APP); } catch (e) { /* storage non disponibile */ }
+  };
+
+  if (vista === null) {
+    // Primo avvio in assoluto: non ha senso mostrare tutta la cronologia a un
+    // utente nuovo, segniamo solo la versione attuale come vista.
+    segnaComeVista();
+    return;
+  }
 
   let testoChangelog;
   try {
@@ -1787,14 +1827,12 @@ async function mostraBannerNovita() {
     return; // Offline al primissimo avvio (non ancora in cache): niente banner, si riprova al prossimo.
   }
 
-  const sezioni = _estraiNoteVersione(testoChangelog, VERSIONE_APP);
-  const segnaComeVista = () => {
-    try { localStorage.setItem(CHIAVE_ULTIMA_VERSIONE_VISTA, VERSIONE_APP); } catch (e) { /* storage non disponibile */ }
-  };
-  if (!sezioni || sezioni.length === 0) {
+  const blocchi = _estraiNoteIntervallo(testoChangelog, vista, VERSIONE_APP);
+  if (!blocchi || blocchi.length === 0) {
     segnaComeVista();
     return;
   }
+  const multiplo = blocchi.length > 1;
 
   const banner = document.createElement("div");
   banner.id = "banner-novita";
@@ -1803,7 +1841,9 @@ async function mostraBannerNovita() {
   const intestazione = document.createElement("div");
   intestazione.className = "banner-novita-intestazione";
   const titolo = document.createElement("strong");
-  titolo.textContent = `✨ Novità della versione v${VERSIONE_APP}`;
+  titolo.textContent = multiplo
+    ? `✨ Novità dalla versione v${vista} alla v${VERSIONE_APP}`
+    : `✨ Novità della versione v${VERSIONE_APP}`;
   const btnChiudi = document.createElement("button");
   btnChiudi.className = "banner-chiudi";
   btnChiudi.textContent = "✕";
@@ -1818,20 +1858,28 @@ async function mostraBannerNovita() {
 
   const corpo = document.createElement("div");
   corpo.className = "banner-novita-corpo";
-  for (const sez of sezioni) {
-    if (sez.titolo) {
-      const h = document.createElement("div");
-      h.className = "banner-novita-sezione";
-      h.textContent = NOMI_SEZIONE_CHANGELOG[sez.titolo] || sez.titolo;
-      corpo.appendChild(h);
+  for (const blocco of blocchi) {
+    if (multiplo) {
+      const hv = document.createElement("div");
+      hv.className = "banner-novita-versione";
+      hv.textContent = `v${blocco.versione}`;
+      corpo.appendChild(hv);
     }
-    const ul = document.createElement("ul");
-    for (const b of sez.bullet) {
-      const li = document.createElement("li");
-      li.textContent = b;
-      ul.appendChild(li);
+    for (const sez of blocco.sezioni) {
+      if (sez.titolo) {
+        const h = document.createElement("div");
+        h.className = "banner-novita-sezione";
+        h.textContent = NOMI_SEZIONE_CHANGELOG[sez.titolo] || sez.titolo;
+        corpo.appendChild(h);
+      }
+      const ul = document.createElement("ul");
+      for (const b of sez.bullet) {
+        const li = document.createElement("li");
+        li.textContent = b;
+        ul.appendChild(li);
+      }
+      corpo.appendChild(ul);
     }
-    corpo.appendChild(ul);
   }
   banner.appendChild(corpo);
 

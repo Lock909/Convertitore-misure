@@ -672,23 +672,11 @@ def _leggi_versione_app() -> str:
     return m.group(1) if m else ""
 
 
-def _estrai_novita_changelog(versione: str) -> list:
-    """Ritorna [(nome_sezione, [bullet, ...]), ...] per il blocco "## [vN]" dato,
-    gestendo bullet su più righe (continuazione: riga che non inizia con "-" né
-    "#" viene accodata al bullet precedente)."""
-    if not versione:
-        return []
-    try:
-        testo = open(_CHANGELOG_PATH, "r", encoding="utf-8").read()
-    except OSError:
-        return []
-    marker = f"## [v{versione}]"
-    inizio = testo.find(marker)
-    if inizio == -1:
-        return []
-    fine = testo.find("\n## [", inizio + len(marker))
-    blocco = testo[inizio:] if fine == -1 else testo[inizio:fine]
-
+def _analizza_sezioni_blocco(blocco: str) -> list:
+    """Ritorna [(nome_sezione, [bullet, ...]), ...] per UN blocco versione
+    (testo che parte da "## [vN] - data"), gestendo bullet su più righe
+    (continuazione: riga che non inizia con "-" né "#" viene accodata al
+    bullet precedente)."""
     sezioni = []
     sezione_corrente = None
     for riga in blocco.split("\n")[1:]:
@@ -706,6 +694,44 @@ def _estrai_novita_changelog(versione: str) -> list:
         elif sezione_corrente and sezione_corrente[1]:
             sezione_corrente[1][-1] += " " + r
     return sezioni
+
+
+def _elenca_blocchi_changelog(testo: str) -> list:
+    """Ritorna [(numero_versione, testo_blocco), ...] per ogni blocco
+    "## [vN] - data" trovato nel changelog, nell'ordine in cui compaiono nel file."""
+    match_iter = list(re.finditer(r"^## \[v(\d+)\]", testo, re.MULTILINE))
+    blocchi = []
+    for i, m in enumerate(match_iter):
+        fine = match_iter[i + 1].start() if i + 1 < len(match_iter) else len(testo)
+        blocchi.append((int(m.group(1)), testo[m.start():fine]))
+    return blocchi
+
+
+def _estrai_novita_intervallo(versione_vista, versione_corrente: str) -> list:
+    """Ritorna [(numero_versione, sezioni), ...] per ogni versione tra
+    versione_vista (esclusa) e versione_corrente (inclusa), dalla più recente
+    alla più vecchia — copre chi ha saltato più di un aggiornamento. Se
+    versione_vista manca/non è valida o l'intervallo risulta vuoto, ricade
+    sulla sola versione corrente."""
+    try:
+        testo = open(_CHANGELOG_PATH, "r", encoding="utf-8").read()
+    except OSError:
+        return []
+    blocchi = _elenca_blocchi_changelog(testo)
+    corrente = int(versione_corrente)
+
+    selezionati = []
+    if versione_vista:
+        try:
+            vista = int(versione_vista)
+            selezionati = [(n, b) for n, b in blocchi if vista < n <= corrente]
+        except ValueError:
+            selezionati = []
+    if not selezionati:
+        selezionati = [(n, b) for n, b in blocchi if n == corrente]
+
+    selezionati.sort(key=lambda x: x[0], reverse=True)
+    return [(n, _analizza_sezioni_blocco(b)) for n, b in selezionati]
 
 
 def _scrivi_cookie_versione_vista(versione: str) -> None:
@@ -751,21 +777,35 @@ def _mostra_banner_novita() -> None:
             st.session_state["_cookie_versione_vista_scritto"] = True
         return
 
-    sezioni = _estrai_novita_changelog(versione)
-    if not sezioni:
+    if vista_cookie is None:
+        # Primo avvio in assoluto: non ha senso mostrare tutta la cronologia
+        # a un utente nuovo, segniamo solo la versione attuale come vista.
+        _scrivi_cookie_versione_vista(versione)
+        return
+
+    blocchi = _estrai_novita_intervallo(vista_cookie, versione)
+    if not blocchi:
         # Niente da mostrare (es. subito dopo il deploy, prima che il CHANGELOG
         # sia stato committato): segna comunque come vista per non ritentare la
         # lettura del file a ogni sessione.
         _scrivi_cookie_versione_vista(versione)
         return
 
-    testo_md = f"**✨ Novità della versione v{versione}**\n\n"
-    for nome_sez, bullet in sezioni:
-        etichetta = _NOMI_SEZIONE_CHANGELOG.get(nome_sez, nome_sez)
-        if etichetta:
-            testo_md += f"_{etichetta}_\n"
-        for b in bullet:
-            testo_md += f"- {b}\n"
+    multiplo = len(blocchi) > 1
+    testo_md = (
+        f"**✨ Novità dalla versione v{vista_cookie} alla v{versione}**\n\n" if multiplo
+        else f"**✨ Novità della versione v{versione}**\n\n"
+    )
+    for num_v, sezioni in blocchi:
+        if multiplo:
+            testo_md += f"**v{num_v}**\n"
+        for nome_sez, bullet in sezioni:
+            etichetta = _NOMI_SEZIONE_CHANGELOG.get(nome_sez, nome_sez)
+            if etichetta:
+                testo_md += f"_{etichetta}_\n"
+            for b in bullet:
+                testo_md += f"- {b}\n"
+        testo_md += "\n"
 
     col1, col2 = st.columns([30, 1])
     with col1:
