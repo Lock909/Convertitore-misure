@@ -8,6 +8,10 @@ import fulmini
 import batterie_piombo as bpb
 import misuratori_portata as mport
 import antincendio as ai
+import atex
+import vaso_espansione as vesp
+import illuminazione_emergenza as ie
+import gruppo_frigo as gf
 import vibrazioni
 import pneumatica
 import trasmissioni
@@ -2705,6 +2709,174 @@ class TestAntincendio(unittest.TestCase):
         self.assertAlmostEqual(r["Q_tot_lmin"], 360.0)
         self.assertAlmostEqual(r["V_m3"], 21.6)
         self.assertAlmostEqual(r["H_pompa_bar"], 4.271020888496617, places=6)
+
+
+class TestAtex(unittest.TestCase):
+    def test_categoria_minima_gas(self):
+        r = atex.categoria_minima_gas(1)
+        self.assertEqual(r["categoria_minima"], "2G")
+        self.assertEqual(r["epl_minimo"], "Gb")
+
+    def test_categoria_minima_gas_invalida(self):
+        with self.assertRaises(ValueError):
+            atex.categoria_minima_gas(3)
+
+    def test_categoria_minima_polveri(self):
+        r = atex.categoria_minima_polveri(21)
+        self.assertEqual(r["categoria_minima"], "2D")
+        self.assertEqual(r["epl_minimo"], "Db")
+
+    def test_categoria_minima_polveri_invalida(self):
+        with self.assertRaises(ValueError):
+            atex.categoria_minima_polveri(23)
+
+    def test_classe_temperatura(self):
+        r = atex.classe_temperatura(280)
+        self.assertEqual(r["classe_temperatura"], "T3")
+        self.assertAlmostEqual(r["T_max_superficie_C"], 200.0)
+
+    def test_classe_temperatura_alta(self):
+        r = atex.classe_temperatura(500)
+        self.assertEqual(r["classe_temperatura"], "T1")
+
+    def test_classe_temperatura_troppo_bassa(self):
+        with self.assertRaises(ValueError):
+            atex.classe_temperatura(80)
+
+    def test_marcatura_atex_gas(self):
+        r = atex.marcatura_atex(1, "IIB", 280)
+        self.assertEqual(r["marcatura_indicativa"], "II 2G Ex IIB T3 Gb")
+        self.assertEqual(r["gruppo_gas"], "IIB")
+
+    def test_marcatura_atex_polveri(self):
+        r = atex.marcatura_atex(21)
+        self.assertEqual(r["marcatura_indicativa"], "II 2D Ex Db")
+        self.assertNotIn("gruppo_gas", r)
+
+    def test_marcatura_atex_zona_invalida(self):
+        with self.assertRaises(ValueError):
+            atex.marcatura_atex(5)
+
+    def test_marcatura_atex_gruppo_gas_invalido(self):
+        with self.assertRaises(ValueError):
+            atex.marcatura_atex(1, "IID")
+
+
+class TestVasoEspansione(unittest.TestCase):
+    def test_coefficiente_dilatazione(self):
+        r = vesp.coefficiente_dilatazione(80)
+        self.assertAlmostEqual(r["e"], 0.0289)
+
+    def test_coefficiente_dilatazione_interpolato(self):
+        r = vesp.coefficiente_dilatazione(45)
+        self.assertAlmostEqual(r["e"], 0.01)
+
+    def test_coefficiente_dilatazione_saturazione(self):
+        self.assertAlmostEqual(vesp.coefficiente_dilatazione(5)["e"], 0.0003)
+        self.assertAlmostEqual(vesp.coefficiente_dilatazione(150)["e"], 0.0435)
+
+    def test_volume_espansione(self):
+        r = vesp.volume_espansione(500, 80)
+        self.assertAlmostEqual(r["Ve_l"], 14.45)
+
+    def test_fattore_utilizzo_vaso(self):
+        r = vesp.fattore_utilizzo_vaso(1.5, 3.0)
+        self.assertAlmostEqual(r["Fu"], 0.375)
+
+    def test_fattore_utilizzo_vaso_validazioni(self):
+        with self.assertRaises(ValueError):
+            vesp.fattore_utilizzo_vaso(-1, 3.0)
+        with self.assertRaises(ValueError):
+            vesp.fattore_utilizzo_vaso(3.0, 3.0)
+
+    def test_pressione_statica_da_altezza(self):
+        r = vesp.pressione_statica_da_altezza(15)
+        self.assertAlmostEqual(r["P_statica_bar"], 1.4710208884966167, places=6)
+
+    def test_volume_vaso_nominale(self):
+        r = vesp.volume_vaso_nominale(500, 80, 1.5, 3.0)
+        self.assertAlmostEqual(r["Vn_l"], 38.53333333333333, places=6)
+        self.assertAlmostEqual(r["Ve_l"], 14.45)
+        self.assertAlmostEqual(r["Fu"], 0.375)
+
+
+class TestIlluminazioneEmergenza(unittest.TestCase):
+    def test_verifica_via_esodo_conforme(self):
+        r = ie.verifica_via_esodo(1.5, 0.8)
+        self.assertTrue(r["conforme"])
+
+    def test_verifica_via_esodo_non_conforme(self):
+        r = ie.verifica_via_esodo(0.8, 0.3)
+        self.assertFalse(r["conforme"])
+
+    def test_verifica_area_aperta(self):
+        self.assertTrue(ie.verifica_area_aperta(0.6)["conforme"])
+        self.assertFalse(ie.verifica_area_aperta(0.4)["conforme"])
+
+    def test_illuminamento_minimo_area_rischio_sopra_soglia(self):
+        r = ie.illuminamento_minimo_area_rischio(300)
+        self.assertAlmostEqual(r["E_minimo_richiesto_lux"], 30.0)
+
+    def test_illuminamento_minimo_area_rischio_sotto_soglia(self):
+        r = ie.illuminamento_minimo_area_rischio(100)
+        self.assertAlmostEqual(r["E_minimo_richiesto_lux"], 15.0)
+
+    def test_verifica_uniformita_conforme(self):
+        r = ie.verifica_uniformita(20, 1)
+        self.assertTrue(r["conforme"])
+        self.assertAlmostEqual(r["rapporto"], 20.0)
+
+    def test_verifica_uniformita_non_conforme(self):
+        r = ie.verifica_uniformita(45, 1)
+        self.assertFalse(r["conforme"])
+
+    def test_verifica_uniformita_validazioni(self):
+        with self.assertRaises(ValueError):
+            ie.verifica_uniformita(1, 5)
+
+    def test_autonomia_minima_richiesta(self):
+        r = ie.autonomia_minima_richiesta("affollamento_elevato")
+        self.assertAlmostEqual(r["autonomia_minima_h"], 2.0)
+
+    def test_autonomia_minima_tipo_non_valido(self):
+        with self.assertRaises(ValueError):
+            ie.autonomia_minima_richiesta("inesistente")
+
+
+class TestGruppoFrigo(unittest.TestCase):
+    def test_cop_pompa_di_calore(self):
+        r = gf.cop_pompa_di_calore(10, 3)
+        self.assertAlmostEqual(r["COP"], 3.3333333333333335, places=6)
+
+    def test_eer_raffrescamento(self):
+        r = gf.eer_raffrescamento(8, 2.5)
+        self.assertAlmostEqual(r["EER"], 3.2)
+
+    def test_cop_carnot_riscaldamento(self):
+        r = gf.cop_carnot_riscaldamento(45, 5)
+        self.assertAlmostEqual(r["COP_Carnot"], 7.95375, places=4)
+
+    def test_eer_carnot_raffrescamento(self):
+        r = gf.eer_carnot_raffrescamento(35, 7)
+        self.assertAlmostEqual(r["EER_Carnot"], 10.005357142857141, places=4)
+
+    def test_cop_carnot_validazioni(self):
+        with self.assertRaises(ValueError):
+            gf.cop_carnot_riscaldamento(5, 45)
+
+    def test_rendimento_secondo_principio(self):
+        r = gf.rendimento_secondo_principio(3.3333333333333335, 7.95375)
+        self.assertAlmostEqual(r["eta_secondo_principio_pct"], 41.90895280004191, places=4)
+
+    def test_rendimento_secondo_principio_oltre_carnot(self):
+        with self.assertRaises(ValueError):
+            gf.rendimento_secondo_principio(9.0, 7.95375)
+
+    def test_dimensionamento_completo_riscaldamento(self):
+        r = gf.dimensionamento_completo_riscaldamento(10, 3, 45, 5)
+        self.assertAlmostEqual(r["COP"], 3.3333333333333335, places=6)
+        self.assertAlmostEqual(r["COP_Carnot"], 7.95375, places=4)
+        self.assertAlmostEqual(r["eta_secondo_principio_pct"], 41.90895280004192, places=4)
 
 
 if __name__ == "__main__":

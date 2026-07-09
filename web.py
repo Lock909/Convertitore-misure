@@ -27,6 +27,10 @@ import fulmini
 import batterie_piombo
 import misuratori_portata
 import antincendio
+import atex
+import vaso_espansione
+import illuminazione_emergenza
+import gruppo_frigo
 import vibrazioni
 import pneumatica
 import trasmissioni
@@ -559,6 +563,7 @@ def _build_tool_index() -> list:
         "Isolamento Termico — Parete Piana", "Isolamento Termico — Tubo Cilindrico",
         "Serbatoi — Volume e Pressione", "Serbatoi — Svuotamento (Torricelli)",
         "Condotte Aria HVAC", "Misuratori di Portata",
+        "Vaso di Espansione (UNI 9182)", "Pompe di Calore/Gruppi Frigoriferi — COP/EER",
     ], "🌡️  Termotecnica & Impianti", "termo_tool")
 
     _add([
@@ -566,6 +571,7 @@ def _build_tool_index() -> list:
         "Rumore — Attenuazione per Distanza", "Performance Level — EN ISO 13849",
         "Costi Energetici e Payback Efficientamento",
         "Protezione Fulmini (LPS)", "Antincendio — Rete Idranti/Naspi (UNI 10779)",
+        "ATEX — Classificazione Zone", "Illuminazione di Emergenza (UNI EN 1838)",
     ], "🔒  Sicurezza & Utilities", "sic_tool")
 
     _add([
@@ -6852,6 +6858,8 @@ elif categoria == "🌡️  Termotecnica & Impianti":
             "Serbatoi — Svuotamento (Torricelli)",
             "Condotte Aria HVAC",
             "Misuratori di Portata",
+            "Vaso di Espansione (UNI 9182)",
+            "Pompe di Calore/Gruppi Frigoriferi — COP/EER",
         ],
         key="termo_tool",
     )
@@ -7517,6 +7525,122 @@ elif categoria == "🌡️  Termotecnica & Impianti":
                     key="mp3_export",
                 )
 
+    elif tool_termo == "Vaso di Espansione (UNI 9182)":
+        st.subheader("Vaso di espansione a membrana — Dimensionamento (UNI 9182)")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            V_ve = st.number_input("Volume acqua impianto [l]:", value=500.0, min_value=1.0, key="ve_V")
+            T_ve = st.number_input("Temperatura massima di esercizio [°C]:", value=80.0, min_value=1.0, key="ve_T")
+        with col2:
+            Pi_ve = st.number_input("Pressione di precarica vaso [bar]:", value=1.5, min_value=0.0, step=0.1, key="ve_Pi",
+                                     help="Di norma pari alla pressione statica dell'impianto (altezza colonna d'acqua).")
+        with col3:
+            Pf_ve = st.number_input("Pressione massima di esercizio [bar]:", value=3.0, min_value=0.1, step=0.1, key="ve_Pf",
+                                     help="Taratura valvola di sicurezza, già al netto di un margine di sicurezza.")
+        if st.button("Dimensiona Vaso di Espansione", key="ve_btn"):
+            try:
+                r = vaso_espansione.volume_vaso_nominale(V_ve, T_ve, Pi_ve, Pf_ve)
+                st.session_state["_ve_result"] = r
+            except (ValueError, ZeroDivisionError) as e:
+                st.session_state["_ve_result"] = None
+                st.error(str(e))
+
+        r = st.session_state.get("_ve_result")
+        if r:
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Volume espansione", f"{r['Ve_l']:.2f} l")
+            c2.metric("Fattore di utilizzo", f"{r['Fu']:.3f}")
+            c3.metric("Volume nominale vaso", f"{r['Vn_l']:.1f} l")
+            _export_csv_button(
+                "Vaso di Espansione — Dimensionamento",
+                {"V impianto [l]": V_ve, "T max [°C]": T_ve, "P precarica [bar]": Pi_ve, "P taratura [bar]": Pf_ve,
+                 "Ve [l]": f"{r['Ve_l']:.2f}", "Fu": f"{r['Fu']:.3f}", "Vn [l]": f"{r['Vn_l']:.1f}"},
+                key="ve_export",
+            )
+
+        st.markdown("---")
+        st.caption("Stima pressione statica da altezza colonna d'acqua (1 bar ≈ 10.197 m):")
+        col1, col2 = st.columns(2)
+        with col1:
+            h_ve = st.number_input("Altezza colonna d'acqua [m]:", value=15.0, min_value=0.0, key="ve_h")
+        with col2:
+            if st.button("Calcola Pressione Statica", key="ve_btn2"):
+                try:
+                    rs = vaso_espansione.pressione_statica_da_altezza(h_ve)
+                    st.session_state["_ve2_result"] = rs
+                except (ValueError, ZeroDivisionError) as e:
+                    st.session_state["_ve2_result"] = None
+                    st.error(str(e))
+        rs = st.session_state.get("_ve2_result")
+        if rs:
+            st.metric("Pressione statica", f"{rs['P_statica_bar']:.3f} bar")
+
+    elif tool_termo == "Pompe di Calore/Gruppi Frigoriferi — COP/EER":
+        st.subheader("Pompe di calore e gruppi frigoriferi — COP/EER reale vs limite di Carnot")
+        sub_gf = st.radio("Modalità:", ["Riscaldamento (pompa di calore)", "Raffrescamento (gruppo frigo)"], horizontal=True, key="gf_sub")
+
+        if sub_gf == "Riscaldamento (pompa di calore)":
+            col1, col2 = st.columns(2)
+            with col1:
+                Qu_gf = st.number_input("Potenza termica utile [kW]:", value=10.0, min_value=0.1, key="gf_Qu")
+                Pe_gf = st.number_input("Potenza elettrica assorbita [kW]:", value=3.0, min_value=0.1, key="gf_Pe")
+            with col2:
+                Tc_gf = st.number_input("Temperatura di mandata [°C]:", value=45.0, key="gf_Tc")
+                Tf_gf = st.number_input("Temperatura sorgente fredda [°C]:", value=5.0, key="gf_Tf")
+            if st.button("Valuta Pompa di Calore", key="gf_btn1"):
+                try:
+                    r = gruppo_frigo.dimensionamento_completo_riscaldamento(Qu_gf, Pe_gf, Tc_gf, Tf_gf)
+                    st.session_state["_gf1_result"] = r
+                except (ValueError, ZeroDivisionError) as e:
+                    st.session_state["_gf1_result"] = None
+                    st.error(str(e))
+
+            r = st.session_state.get("_gf1_result")
+            if r:
+                c1, c2, c3 = st.columns(3)
+                c1.metric("COP reale", f"{r['COP']:.2f}")
+                c2.metric("COP di Carnot (limite teorico)", f"{r['COP_Carnot']:.2f}")
+                c3.metric("Rendimento II principio", f"{r['eta_secondo_principio_pct']:.1f}%")
+                _export_csv_button(
+                    "Pompa di Calore — COP",
+                    {"Q utile [kW]": Qu_gf, "P elettrica [kW]": Pe_gf, "T mandata [°C]": Tc_gf, "T sorgente [°C]": Tf_gf,
+                     "COP reale": f"{r['COP']:.2f}", "COP Carnot": f"{r['COP_Carnot']:.2f}",
+                     "Rendimento II principio [%]": f"{r['eta_secondo_principio_pct']:.1f}"},
+                    key="gf1_export",
+                )
+
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                Qf_gf = st.number_input("Potenza frigorifera [kW]:", value=8.0, min_value=0.1, key="gf_Qf")
+                Pe2_gf = st.number_input("Potenza elettrica assorbita [kW]:", value=2.5, min_value=0.1, key="gf_Pe2")
+            with col2:
+                Tcond_gf = st.number_input("Temperatura di condensazione [°C]:", value=35.0, key="gf_Tcond")
+                Tevap_gf = st.number_input("Temperatura di evaporazione [°C]:", value=7.0, key="gf_Tevap")
+            if st.button("Valuta Gruppo Frigo", key="gf_btn2"):
+                try:
+                    reale = gruppo_frigo.eer_raffrescamento(Qf_gf, Pe2_gf)
+                    carnot = gruppo_frigo.eer_carnot_raffrescamento(Tcond_gf, Tevap_gf)
+                    eta = gruppo_frigo.rendimento_secondo_principio(reale["EER"], carnot["EER_Carnot"])
+                    st.session_state["_gf2_result"] = {**reale, **carnot, **eta}
+                except (ValueError, ZeroDivisionError) as e:
+                    st.session_state["_gf2_result"] = None
+                    st.error(str(e))
+
+            r = st.session_state.get("_gf2_result")
+            if r:
+                c1, c2, c3 = st.columns(3)
+                c1.metric("EER reale", f"{r['EER']:.2f}")
+                c2.metric("EER di Carnot (limite teorico)", f"{r['EER_Carnot']:.2f}")
+                c3.metric("Rendimento II principio", f"{r['eta_secondo_principio_pct']:.1f}%")
+                _export_csv_button(
+                    "Gruppo Frigo — EER",
+                    {"Q frigorifera [kW]": Qf_gf, "P elettrica [kW]": Pe2_gf, "T condensazione [°C]": Tcond_gf, "T evaporazione [°C]": Tevap_gf,
+                     "EER reale": f"{r['EER']:.2f}", "EER Carnot": f"{r['EER_Carnot']:.2f}",
+                     "Rendimento II principio [%]": f"{r['eta_secondo_principio_pct']:.1f}"},
+                    key="gf2_export",
+                )
+
 
 elif categoria == "🔒  Sicurezza & Utilities":
     _card_open("sic", "🔒 Sicurezza & Utilities", "ISO 9612 / D.Lgs 81/2008")
@@ -7531,6 +7655,8 @@ elif categoria == "🔒  Sicurezza & Utilities":
             "Costi Energetici e Payback Efficientamento",
             "Protezione Fulmini (LPS)",
             "Antincendio — Rete Idranti/Naspi (UNI 10779)",
+            "ATEX — Classificazione Zone",
+            "Illuminazione di Emergenza (UNI EN 1838)",
         ],
         key="sic_tool",
     )
@@ -7992,6 +8118,131 @@ elif categoria == "🔒  Sicurezza & Utilities":
                     {"Area [m²]": area_ai, "Interasse [m]": inter_ai, "N. protezioni stimato": r["n_protezioni_stimato"]},
                     key="ai2_export",
                 )
+
+    elif tool_sic == "ATEX — Classificazione Zone":
+        st.subheader("ATEX — Marcatura apparecchiatura per zona classificata (Direttiva 2014/34/UE)")
+        st.caption("Marcatura indicativa: per la scelta definitiva dell'apparecchiatura fare riferimento al "
+                   "documento di valutazione del rischio esplosione (DVRE) e a un professionista abilitato.")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            zona_atex = st.selectbox("Zona classificata:", [0, 1, 2, 20, 21, 22], index=1, key="atex_zona",
+                                      format_func=lambda z: f"Zona {z} — {'gas/vapori' if z < 10 else 'polveri'}")
+        with col2:
+            gruppo_atex = st.selectbox("Gruppo gas (solo zone 0/1/2):", ["IIA", "IIB", "IIC"], index=1, key="atex_gruppo")
+        with col3:
+            T_atex = st.number_input("Temperatura di autoaccensione sostanza [°C] (opzionale):", value=0.0, min_value=0.0, step=1.0, key="atex_T",
+                                      help="Lascia 0 per omettere la classe di temperatura dalla marcatura.")
+        if st.button("Calcola Marcatura", key="atex_btn"):
+            try:
+                T_atex_arg = T_atex if T_atex > 0 else None
+                r = atex.marcatura_atex(zona_atex, gruppo_atex, T_atex_arg)
+                st.session_state["_atex_result"] = r
+            except ValueError as e:
+                st.session_state["_atex_result"] = None
+                st.error(str(e))
+
+        r = st.session_state.get("_atex_result")
+        if r:
+            c1, c2 = st.columns(2)
+            c1.metric("Categoria minima", r["categoria_minima"])
+            c2.metric("EPL minimo", r["epl_minimo"])
+            if "classe_temperatura" in r:
+                st.info(f"Classe di temperatura: **{r['classe_temperatura']}** (T max superficie {r['T_max_superficie_C']:.0f} °C)")
+            st.success(f"Marcatura indicativa: **{r['marcatura_indicativa']}**")
+            _export_csv_button(
+                "ATEX — Marcatura",
+                {"Zona": zona_atex, "Categoria minima": r["categoria_minima"], "EPL minimo": r["epl_minimo"],
+                 "Marcatura indicativa": r["marcatura_indicativa"]},
+                key="atex_export",
+            )
+
+    elif tool_sic == "Illuminazione di Emergenza (UNI EN 1838)":
+        st.subheader("Illuminazione di sicurezza — Verifiche UNI EN 1838")
+        sub_ie = st.radio("Verifica:", ["Via di esodo", "Area aperta", "Area a rischio specifico", "Uniformità", "Autonomia minima"], horizontal=True, key="ie_sub")
+
+        if sub_ie == "Via di esodo":
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                Ea_ie = st.number_input("Illuminamento asse centrale [lux]:", value=1.5, min_value=0.0, step=0.1, key="ie_Ea")
+            with col2:
+                Em_ie = st.number_input("Illuminamento fascia centrale [lux]:", value=0.8, min_value=0.0, step=0.1, key="ie_Em")
+            with col3:
+                L_ie = st.number_input("Larghezza via di esodo [m]:", value=2.0, min_value=0.1, step=0.1, key="ie_L")
+            if st.button("Verifica Via di Esodo", key="ie_btn1"):
+                try:
+                    r = illuminazione_emergenza.verifica_via_esodo(Ea_ie, Em_ie, L_ie)
+                    st.session_state["_ie1_result"] = r
+                except ValueError as e:
+                    st.session_state["_ie1_result"] = None
+                    st.error(str(e))
+            r = st.session_state.get("_ie1_result")
+            if r:
+                if r["conforme"]:
+                    st.success(f"Conforme: asse {r['E_asse_lux']} lux (min {r['E_asse_minimo_lux']}), fascia {r['E_min_lux']} lux (min {r['E_min_minimo_lux']}).")
+                else:
+                    st.error(f"NON conforme: asse {r['E_asse_lux']} lux (min {r['E_asse_minimo_lux']}), fascia {r['E_min_lux']} lux (min {r['E_min_minimo_lux']}).")
+
+        elif sub_ie == "Area aperta":
+            E_aa = st.number_input("Illuminamento misurato [lux]:", value=0.6, min_value=0.0, step=0.1, key="ie_Eaa")
+            if st.button("Verifica Area Aperta", key="ie_btn2"):
+                try:
+                    r = illuminazione_emergenza.verifica_area_aperta(E_aa)
+                    st.session_state["_ie2_result"] = r
+                except ValueError as e:
+                    st.session_state["_ie2_result"] = None
+                    st.error(str(e))
+            r = st.session_state.get("_ie2_result")
+            if r:
+                if r["conforme"]:
+                    st.success(f"Conforme: {r['E_lux']} lux (minimo richiesto {r['E_minimo_lux']} lux).")
+                else:
+                    st.error(f"NON conforme: {r['E_lux']} lux (minimo richiesto {r['E_minimo_lux']} lux).")
+
+        elif sub_ie == "Area a rischio specifico":
+            E_norm = st.number_input("Illuminamento normale di esercizio [lux]:", value=300.0, min_value=0.1, key="ie_Enorm")
+            if st.button("Calcola Illuminamento Minimo", key="ie_btn3"):
+                try:
+                    r = illuminazione_emergenza.illuminamento_minimo_area_rischio(E_norm)
+                    st.session_state["_ie3_result"] = r
+                except ValueError as e:
+                    st.session_state["_ie3_result"] = None
+                    st.error(str(e))
+            r = st.session_state.get("_ie3_result")
+            if r:
+                st.metric("Illuminamento minimo richiesto", f"{r['E_minimo_richiesto_lux']:.1f} lux")
+
+        elif sub_ie == "Uniformità":
+            col1, col2 = st.columns(2)
+            with col1:
+                E_max_ie = st.number_input("Illuminamento massimo [lux]:", value=20.0, min_value=0.1, key="ie_Emax")
+            with col2:
+                E_min_ie = st.number_input("Illuminamento minimo [lux]:", value=1.0, min_value=0.1, key="ie_Emin")
+            if st.button("Verifica Uniformità", key="ie_btn4"):
+                try:
+                    r = illuminazione_emergenza.verifica_uniformita(E_max_ie, E_min_ie)
+                    st.session_state["_ie4_result"] = r
+                except ValueError as e:
+                    st.session_state["_ie4_result"] = None
+                    st.error(str(e))
+            r = st.session_state.get("_ie4_result")
+            if r:
+                if r["conforme"]:
+                    st.success(f"Conforme: rapporto {r['rapporto']:.1f}:1 (massimo {r['rapporto_massimo']:.0f}:1).")
+                else:
+                    st.error(f"NON conforme: rapporto {r['rapporto']:.1f}:1 (massimo {r['rapporto_massimo']:.0f}:1).")
+
+        else:
+            tipo_ie = st.selectbox("Tipo di luogo:", ["normale", "affollamento_elevato", "alto_rischio"], key="ie_tipo")
+            if st.button("Calcola Autonomia Minima", key="ie_btn5"):
+                try:
+                    r = illuminazione_emergenza.autonomia_minima_richiesta(tipo_ie)
+                    st.session_state["_ie5_result"] = r
+                except ValueError as e:
+                    st.session_state["_ie5_result"] = None
+                    st.error(str(e))
+            r = st.session_state.get("_ie5_result")
+            if r:
+                st.metric("Autonomia minima richiesta", f"{r['autonomia_minima_h']:.0f} h")
 
 
 elif categoria == "🎛️  Mark VI/VIe & ToolboxST":

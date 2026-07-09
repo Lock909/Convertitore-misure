@@ -78,6 +78,10 @@ const ASSET_APP = [
   "./py/batterie_piombo.py",
   "./py/misuratori_portata.py",
   "./py/antincendio.py",
+  "./py/atex.py",
+  "./py/vaso_espansione.py",
+  "./py/illuminazione_emergenza.py",
+  "./py/gruppo_frigo.py",
   "./py/bridge.py",
   "./CHANGELOG.md",
 ];
