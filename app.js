@@ -1952,6 +1952,19 @@ async function mostraBannerNovita() {
   }
   banner.appendChild(corpo);
 
+  const azioni = document.createElement("div");
+  azioni.className = "banner-novita-azioni";
+  const btnCronologia = document.createElement("button");
+  btnCronologia.className = "banner-novita-link";
+  btnCronologia.textContent = "Vedi tutta la cronologia →";
+  btnCronologia.addEventListener("click", () => {
+    banner.remove();
+    segnaComeVista();
+    renderCronologiaVersioni();
+  });
+  azioni.appendChild(btnCronologia);
+  banner.appendChild(azioni);
+
   document.body.prepend(banner);
 }
 

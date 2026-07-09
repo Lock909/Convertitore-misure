@@ -18,6 +18,8 @@ documentate qui per completezza.
 - Il banner "cosa è cambiato" ora copre tutte le versioni intercorse dall'ultima vista (non
   solo l'ultima): chi non apre l'app per un po' e salta più di un aggiornamento vede l'elenco
   completo delle novità, raggruppate per versione dalla più recente alla più vecchia.
+- Il banner include ora un link "Vedi tutta la cronologia →" che apre direttamente la nuova
+  vista "Cronologia versioni", così le due funzionalità si scoprono a vicenda.
 
 ## [v67] - 2026-07-09
 ### Added
