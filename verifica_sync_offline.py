@@ -1,7 +1,7 @@
 # ==============================================================================
-# verifica_sync_offline.py — Confronta i moduli Python duplicati tra la root
-# del progetto e static/pwa_offline/py/, per rilevare divergenze accidentali quando
-# si modifica un modulo su un solo lato (es. si aggiorna formule.py ma ci si
+# verifica_sync_offline.py — Confronta i file duplicati tra la root del
+# progetto e static/pwa_offline/, per rilevare divergenze accidentali quando
+# si modifica un file su un solo lato (es. si aggiorna formule.py ma ci si
 # dimentica di ricopiarlo nella cartella della PWA offline).
 #
 # Uso: python verifica_sync_offline.py
@@ -17,6 +17,12 @@ from pathlib import Path
 
 RADICE = Path(__file__).parent
 CARTELLA_OFFLINE = RADICE / "static" / "pwa_offline" / "py"
+
+# File duplicati che non sono moduli .py sotto py/ (percorso relativo alla
+# root del progetto -> percorso relativo a static/pwa_offline/).
+ALTRI_FILE_DUPLICATI = [
+    ("CHANGELOG.md", "CHANGELOG.md"),
+]
 
 MODULI_DUPLICATI = [
     "costanti.py",
@@ -99,21 +105,41 @@ def verifica() -> int:
         if contenuto_radice != contenuto_offline:
             divergenze.append(nome)
 
+    for nome_radice, nome_offline in ALTRI_FILE_DUPLICATI:
+        percorso_radice = RADICE / nome_radice
+        percorso_offline = RADICE / "static" / "pwa_offline" / nome_offline
+
+        if not percorso_radice.exists():
+            mancanti.append(f"{nome_radice}: manca nella root del progetto ({percorso_radice})")
+            continue
+        if not percorso_offline.exists():
+            mancanti.append(f"{nome_radice}: manca in static/pwa_offline/ ({percorso_offline})")
+            continue
+
+        contenuto_radice = percorso_radice.read_text(encoding="utf-8")
+        contenuto_offline = percorso_offline.read_text(encoding="utf-8")
+        if contenuto_radice != contenuto_offline:
+            divergenze.append(nome_radice)
+
+    totale = len(MODULI_DUPLICATI) + len(ALTRI_FILE_DUPLICATI)
     if not divergenze and not mancanti:
-        print(f"OK — {len(MODULI_DUPLICATI)} moduli sincronizzati tra root e static/pwa_offline/py/.")
+        print(f"OK — {totale} file sincronizzati tra root e static/pwa_offline/.")
         return 0
+
+    percorso_offline_di = {nome: f"static/pwa_offline/py/{nome}" for nome in MODULI_DUPLICATI}
+    percorso_offline_di.update({n_radice: f"static/pwa_offline/{n_offline}" for n_radice, n_offline in ALTRI_FILE_DUPLICATI})
 
     if mancanti:
         print("File mancanti:")
         for m in mancanti:
             print(f"  - {m}")
     if divergenze:
-        print("Moduli DIVERGENTI (contenuto diverso tra root e static/pwa_offline/py/):")
+        print("File DIVERGENTI (contenuto diverso tra root e static/pwa_offline/):")
         for d in divergenze:
             print(f"  - {d}")
         print("\nPer risincronizzare, copia il file aggiornato nell'altra posizione, es.:")
         for d in divergenze:
-            print(f"  cp \"{d}\" \"static/pwa_offline/py/{d}\"    # (o viceversa, a seconda di quale versione è quella corretta)")
+            print(f"  cp \"{d}\" \"{percorso_offline_di[d]}\"    # (o viceversa, a seconda di quale versione è quella corretta)")
 
     return 1
 

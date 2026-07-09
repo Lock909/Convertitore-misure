@@ -73,6 +73,43 @@ body {
   font-weight: 400;
 }
 
+.banner-novita {
+  background: var(--bg-pannello);
+  border-bottom: 1px solid var(--accento);
+  color: var(--testo);
+  padding: 12px 20px;
+  font-size: 0.88rem;
+}
+.banner-novita-intestazione {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.banner-novita-intestazione strong { color: var(--accento); font-size: 0.95rem; }
+.banner-novita .banner-chiudi {
+  background: transparent;
+  border: none;
+  color: var(--testo-attenuato);
+  padding: 2px 8px;
+  font-weight: 400;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.banner-novita-sezione {
+  font-weight: 600;
+  color: var(--testo-attenuato);
+  margin: 6px 0 2px 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.banner-novita-corpo ul {
+  margin: 0 0 4px 0;
+  padding-left: 20px;
+}
+.banner-novita-corpo li { margin-bottom: 2px; }
+
 header {
   padding: 16px 20px;
   border-bottom: 1px solid var(--bordo);

@@ -3,6 +3,7 @@ import io
 import json
 import math
 import os
+import re
 import uuid
 from datetime import datetime
 
@@ -647,6 +648,133 @@ def _save_device_data(data: dict) -> None:
         pass
 
 
+# ── Banner "cosa è cambiato" dopo un aggiornamento ──────────────────────────
+# Stesso numero di versione usato per la PWA (VERSIONE_APP in
+# static/pwa_offline/app.js) e per CHANGELOG.md, letto qui in sola lettura:
+# le release di questo progetto aggiornano entrambe le piattaforme insieme
+# (vedi bump_versione_pwa.py e release.py), quindi non serve un contatore
+# separato per Streamlit.
+
+_CHANGELOG_PATH = os.path.join(os.path.dirname(__file__), "CHANGELOG.md")
+
+_NOMI_SEZIONE_CHANGELOG = {
+    "Added": "Aggiunte", "Changed": "Modifiche", "Fixed": "Correzioni", "Removed": "Rimozioni",
+}
+
+
+def _leggi_versione_app() -> str:
+    percorso = os.path.join(os.path.dirname(__file__), "static", "pwa_offline", "app.js")
+    try:
+        testo = open(percorso, "r", encoding="utf-8").read()
+    except OSError:
+        return ""
+    m = re.search(r'VERSIONE_APP\s*=\s*"(\d+)"', testo)
+    return m.group(1) if m else ""
+
+
+def _estrai_novita_changelog(versione: str) -> list:
+    """Ritorna [(nome_sezione, [bullet, ...]), ...] per il blocco "## [vN]" dato,
+    gestendo bullet su più righe (continuazione: riga che non inizia con "-" né
+    "#" viene accodata al bullet precedente)."""
+    if not versione:
+        return []
+    try:
+        testo = open(_CHANGELOG_PATH, "r", encoding="utf-8").read()
+    except OSError:
+        return []
+    marker = f"## [v{versione}]"
+    inizio = testo.find(marker)
+    if inizio == -1:
+        return []
+    fine = testo.find("\n## [", inizio + len(marker))
+    blocco = testo[inizio:] if fine == -1 else testo[inizio:fine]
+
+    sezioni = []
+    sezione_corrente = None
+    for riga in blocco.split("\n")[1:]:
+        r = riga.strip()
+        if not r:
+            continue
+        if r.startswith("### "):
+            sezione_corrente = [r[4:].strip(), []]
+            sezioni.append(sezione_corrente)
+        elif r.startswith("- "):
+            if sezione_corrente is None:
+                sezione_corrente = ["", []]
+                sezioni.append(sezione_corrente)
+            sezione_corrente[1].append(r[2:].strip())
+        elif sezione_corrente and sezione_corrente[1]:
+            sezione_corrente[1][-1] += " " + r
+    return sezioni
+
+
+def _scrivi_cookie_versione_vista(versione: str) -> None:
+    # Stessa tecnica di _get_device_id(): st.markdown(unsafe_allow_html=True)
+    # inietta via innerHTML e i browser ignorano gli <script> inseriti così,
+    # mentre st.iframe con una stringa HTML crea un documento vero il cui
+    # script eredita il cookie jar del dominio corrente.
+    st.iframe(
+        f"<script>document.cookie='ti_ultima_versione_vista={versione}; max-age=31536000; path=/';</script>",
+        height=1,
+    )
+
+
+def _chiudi_banner_novita(versione: str) -> None:
+    # Eseguito da Streamlit come on_click PRIMA del rerun innescato dal click
+    # (a differenza di un st.rerun() manuale dentro il corpo della funzione,
+    # che interromperebbe lo script troppo presto perché l'iframe che scrive
+    # il cookie faccia in tempo a caricarsi ed eseguire il suo script: provato,
+    # il cookie non veniva scritto). Qui mutiamo solo session_state; l'iframe
+    # si scrive nel rerun successivo, con tutto il tempo di uno script completo.
+    st.session_state["_banner_novita_chiuso"] = versione
+
+
+def _mostra_banner_novita() -> None:
+    versione = _leggi_versione_app()
+    if not versione:
+        return
+    try:
+        vista_cookie = st.context.cookies.get("ti_ultima_versione_vista")
+    except Exception:
+        vista_cookie = None
+    if vista_cookie == versione:
+        return
+
+    if st.session_state.get("_banner_novita_chiuso") == versione:
+        # Chiuso in questa sessione: st.context.cookies riflette solo i cookie
+        # presenti al caricamento della pagina, quindi anche dopo aver scritto
+        # il cookie via iframe non lo vedremo qui finché la pagina non viene
+        # ricaricata da capo — scriviamolo una sola volta (session_state come
+        # guardia) invece di ripeterlo a ogni rerun successivo.
+        if not st.session_state.get("_cookie_versione_vista_scritto"):
+            _scrivi_cookie_versione_vista(versione)
+            st.session_state["_cookie_versione_vista_scritto"] = True
+        return
+
+    sezioni = _estrai_novita_changelog(versione)
+    if not sezioni:
+        # Niente da mostrare (es. subito dopo il deploy, prima che il CHANGELOG
+        # sia stato committato): segna comunque come vista per non ritentare la
+        # lettura del file a ogni sessione.
+        _scrivi_cookie_versione_vista(versione)
+        return
+
+    testo_md = f"**✨ Novità della versione v{versione}**\n\n"
+    for nome_sez, bullet in sezioni:
+        etichetta = _NOMI_SEZIONE_CHANGELOG.get(nome_sez, nome_sez)
+        if etichetta:
+            testo_md += f"_{etichetta}_\n"
+        for b in bullet:
+            testo_md += f"- {b}\n"
+
+    col1, col2 = st.columns([30, 1])
+    with col1:
+        st.info(testo_md)
+    with col2:
+        st.button("✕", key="banner_novita_chiudi", help="Chiudi",
+                   on_click=_chiudi_banner_novita, args=(versione,))
+
+
 def _entry_key(sezione: str, sel_key: str, nome_tool: str) -> str:
     return f"{sezione}||{sel_key}||{nome_tool}"
 
@@ -778,6 +906,8 @@ if "_nav_tool_key" in st.session_state:
     _tv = st.session_state.pop("_nav_tool_val", None)
     if _tk and _tv is not None:
         st.session_state[_tk] = _tv
+
+_mostra_banner_novita()
 
 with st.sidebar:
     st.markdown("## ⚙️ Tool Industriale")
