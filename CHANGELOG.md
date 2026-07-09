@@ -10,6 +10,15 @@ documentate qui per completezza.
 
 ## [v68] - 2026-07-09
 ### Added
+- Nuovo modulo **ATEX — Classificazione zone**: categoria minima di apparecchiatura (EPL),
+  classe di temperatura e marcatura indicativa per zone classificate gas (0/1/2) e polveri
+  (20/21/22), secondo Direttiva 2014/34/UE.
+- Nuovo modulo **Vaso di espansione (UNI 9182)**: volume di espansione, fattore di utilizzo
+  del vaso a membrana e volume nominale minimo, con stima della pressione statica da altezza.
+- Nuovo modulo **Illuminazione di emergenza (UNI EN 1838)**: verifica via di esodo, area
+  aperta (antipanico), area a rischio specifico, uniformità e autonomia minima richiesta.
+- Nuovo modulo **Pompe di calore/Gruppi frigoriferi — COP/EER**: prestazione reale, limite
+  teorico di Carnot e rendimento di secondo principio, sia in riscaldamento che raffrescamento.
 - Nuova vista "Cronologia versioni", sempre raggiungibile (pulsante "🕘 Versioni" nell'header
   della PWA, sezione dedicata sotto "📁 Progetti Salvati" in Streamlit): elenca tutte le
   release passate con le relative novità, per chi vuole ricontrollare cosa è cambiato senza

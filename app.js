@@ -28,6 +28,10 @@ const FILE_PY = [
   "batterie_piombo.py",
   "misuratori_portata.py",
   "antincendio.py",
+  "atex.py",
+  "vaso_espansione.py",
+  "illuminazione_emergenza.py",
+  "gruppo_frigo.py",
   "bridge.py",
 ];
 

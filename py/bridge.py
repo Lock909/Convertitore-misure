@@ -65,6 +65,10 @@ import fulmini
 import batterie_piombo
 import misuratori_portata
 import antincendio
+import atex
+import vaso_espansione
+import illuminazione_emergenza
+import gruppo_frigo
 
 
 def _err(msg: str) -> dict:
@@ -2049,5 +2053,104 @@ def antincendio_numero_protezioni_area(area_m2, interasse_m):
     try:
         return _sanifica(antincendio.numero_protezioni_area(
             float(area_m2), float(interasse_m)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+# ------------------------------------------------------------------ ATEX
+
+def atex_marcatura(zona, gruppo_gas, T_autoaccensione_C):
+    try:
+        # 0 (o vuoto) e' il valore-sentinella del form per "non specificata":
+        # nessuna sostanza reale ha temperatura di autoaccensione <= 0 °C.
+        t_auto_raw = float(T_autoaccensione_C) if T_autoaccensione_C not in (None, "") else 0.0
+        t_auto = t_auto_raw if t_auto_raw > 0 else None
+        return _sanifica(atex.marcatura_atex(int(zona), gruppo_gas, t_auto))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def atex_classe_temperatura(T_autoaccensione_C):
+    try:
+        return _sanifica(atex.classe_temperatura(float(T_autoaccensione_C)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+# ------------------------------------------------------------------ Vaso di espansione
+
+def vaso_espansione_volume_nominale(V_impianto_l, T_max_C, P_precarica_bar, P_taratura_bar):
+    try:
+        return _sanifica(vaso_espansione.volume_vaso_nominale(
+            float(V_impianto_l), float(T_max_C), float(P_precarica_bar), float(P_taratura_bar)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def vaso_espansione_pressione_statica(altezza_m):
+    try:
+        return _sanifica(vaso_espansione.pressione_statica_da_altezza(float(altezza_m)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+# ------------------------------------------------------------------ Illuminazione di emergenza
+
+def illuminazione_emergenza_via_esodo(E_asse_lux, E_min_lux, larghezza_m):
+    try:
+        return _sanifica(illuminazione_emergenza.verifica_via_esodo(
+            float(E_asse_lux), float(E_min_lux), float(larghezza_m)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def illuminazione_emergenza_area_aperta(E_lux):
+    try:
+        return _sanifica(illuminazione_emergenza.verifica_area_aperta(float(E_lux)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def illuminazione_emergenza_area_rischio(E_normale_lux):
+    try:
+        return _sanifica(illuminazione_emergenza.illuminamento_minimo_area_rischio(float(E_normale_lux)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def illuminazione_emergenza_uniformita(E_max_lux, E_min_lux):
+    try:
+        return _sanifica(illuminazione_emergenza.verifica_uniformita(float(E_max_lux), float(E_min_lux)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def illuminazione_emergenza_autonomia(tipo_luogo):
+    try:
+        return _sanifica(illuminazione_emergenza.autonomia_minima_richiesta(tipo_luogo))
+    except ValueError as e:
+        return _err(str(e))
+
+
+# ------------------------------------------------------------------ Gruppi frigoriferi / pompe di calore
+
+def gruppo_frigo_dimensionamento_riscaldamento(Q_utile_kW, P_elettrica_kW, T_calda_C, T_fredda_C):
+    try:
+        return _sanifica(gruppo_frigo.dimensionamento_completo_riscaldamento(
+            float(Q_utile_kW), float(P_elettrica_kW), float(T_calda_C), float(T_fredda_C)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def gruppo_frigo_eer_raffrescamento(Q_frigorifera_kW, P_elettrica_kW):
+    try:
+        return _sanifica(gruppo_frigo.eer_raffrescamento(float(Q_frigorifera_kW), float(P_elettrica_kW)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def gruppo_frigo_eer_carnot_raffrescamento(T_calda_C, T_fredda_C):
+    try:
+        return _sanifica(gruppo_frigo.eer_carnot_raffrescamento(float(T_calda_C), float(T_fredda_C)))
     except ValueError as e:
         return _err(str(e))
