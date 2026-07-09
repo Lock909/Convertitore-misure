@@ -96,6 +96,15 @@ body {
   font-size: 1rem;
   cursor: pointer;
 }
+.banner-novita-versione {
+  font-weight: 700;
+  color: var(--testo);
+  margin: 10px 0 2px 0;
+  font-size: 0.85rem;
+  border-top: 1px solid var(--bordo);
+  padding-top: 8px;
+}
+.banner-novita-versione:first-child { border-top: none; margin-top: 4px; padding-top: 0; }
 .banner-novita-sezione {
   font-weight: 600;
   color: var(--testo-attenuato);
