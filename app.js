@@ -4,7 +4,7 @@
 // i form a partire da CALCOLATORI (calcolatori.js) e mostra i risultati.
 // ==============================================================================
 
-const VERSIONE_APP = "68";
+const VERSIONE_APP = "69";
 
 const FILE_PY = [
   "costanti.py", "formule.py", "portata_cavo.py", "batterie_litio.py",
@@ -1978,6 +1978,8 @@ async function mostraBannerNovita() {
 
 mostraBannerNovita().catch(e => console.error("mostraBannerNovita:", e));
 
+let registrazioneServiceWorker = null;
+
 if ("serviceWorker" in navigator) {
   // Se all'avvio della pagina un service worker controlla già la pagina,
   // un successivo "controllerchange" significa che è stata installata una
@@ -1989,6 +1991,47 @@ if ("serviceWorker" in navigator) {
   });
 
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js").catch(err => console.warn("Service worker non registrato:", err));
+    navigator.serviceWorker.register("service-worker.js")
+      .then(reg => { registrazioneServiceWorker = reg; })
+      .catch(err => console.warn("Service worker non registrato:", err));
+  });
+
+  // Il browser ricontrolla service-worker.js da solo, ma non subito: con una
+  // scheda tenuta aperta a lungo può volerci fino a 24h prima che se ne
+  // accorga. Ricontrollare quando la scheda torna visibile evita di restare
+  // bloccati in silenzio su una versione vecchia.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && registrazioneServiceWorker) {
+      registrazioneServiceWorker.update().catch(() => { /* offline: ignora */ });
+    }
   });
 }
+
+// Forza subito il controllo di un aggiornamento (pulsante "🔄 Aggiorna"),
+// invece di aspettare i tempi del browser. Se viene trovata una versione
+// nuova, la pipeline install→activate→controllerchange già esistente mostra
+// da sola mostraBannerAggiornamento(); se non c'è nulla di nuovo lo diciamo
+// esplicitamente, altrimenti il pulsante sembrerebbe non aver fatto nulla.
+async function cercaAggiornamenti() {
+  if (!("serviceWorker" in navigator)) {
+    mostraToast("Aggiornamenti non supportati su questo browser.");
+    return;
+  }
+  if (!registrazioneServiceWorker) {
+    mostraToast("Service worker non ancora pronto — riprova tra poco.");
+    return;
+  }
+  try {
+    await registrazioneServiceWorker.update();
+  } catch (e) {
+    mostraToast("Verifica fallita — controlla la connessione.");
+    return;
+  }
+  setTimeout(() => {
+    if (!document.getElementById("banner-aggiornamento")) {
+      mostraToast(`Sei già alla versione più recente (v${VERSIONE_APP}).`);
+    }
+  }, 1500);
+}
+
+document.getElementById("btn-cerca-aggiornamenti").addEventListener("click", cercaAggiornamenti);
