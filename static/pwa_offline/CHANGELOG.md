@@ -8,6 +8,15 @@ Le versioni precedenti alla v28 sono state sviluppate prima dell'adozione di Git
 progetto: non hanno un tag corrispondente (nessun commit storico disponibile), ma sono
 documentate qui per completezza.
 
+## [v69] - 2026-07-10
+### Added
+- Pulsante "🔄 Aggiorna" nell'header della PWA offline: forza subito il controllo di una nuova
+  versione invece di aspettare i tempi del browser (fino a 24h), utile per chi tiene l'app
+  aperta a lungo e non vede comparire l'avviso di aggiornamento. Se non ci sono novità lo dice
+  esplicitamente ("Sei già alla versione più recente").
+- Controllo automatico di un aggiornamento anche quando la scheda torna visibile dopo essere
+  stata in background, non solo al caricamento della pagina.
+
 ## [v68] - 2026-07-09
 ### Added
 - Nuovo modulo **ATEX — Classificazione zone**: categoria minima di apparecchiatura (EPL),
