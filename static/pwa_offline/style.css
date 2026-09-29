@@ -733,3 +733,51 @@ footer {
 .riepilogo-batch { margin: 10px 0; font-size: 0.95rem; }
 .tabella-risultati-batch td.esito-ok { color: #3fb950; }
 .tabella-risultati-batch td.esito-errore { color: #e5534b; }
+
+/* Sottogruppi del menu (es. "Automazione" → GE RX3i / Mark VIe / Siemens) */
+.nav-sottogruppo { margin: 2px 0 4px 8px; border-left: 2px solid var(--bordo); }
+.nav-titolo-sottogruppo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--testo);
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: inherit;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+.nav-titolo-sottogruppo:hover { background: var(--bg-pannello); }
+.nav-lista-sottogruppo { padding-left: 4px; }
+.nav-lista-sottogruppo[hidden] { display: none; }
+
+/* Risultati testuali: codice SCL e guide */
+.risultato-testo { margin-top: 12px; }
+.risultato-testo p { line-height: 1.5; }
+.risultato-testo ul { padding-left: 20px; line-height: 1.5; }
+.blocco-codice { margin: 12px 0; }
+.blocco-codice-intestazione {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.codice-scl {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  color: var(--testo);
+  font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+}

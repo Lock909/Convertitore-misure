@@ -12,6 +12,7 @@ import atex
 import vaso_espansione as vesp
 import illuminazione_emergenza as ie
 import gruppo_frigo as gf
+import siemens_s7 as s7
 import vibrazioni
 import pneumatica
 import trasmissioni
@@ -2877,6 +2878,277 @@ class TestGruppoFrigo(unittest.TestCase):
         self.assertAlmostEqual(r["COP"], 3.3333333333333335, places=6)
         self.assertAlmostEqual(r["COP_Carnot"], 7.95375, places=4)
         self.assertAlmostEqual(r["eta_secondo_principio_pct"], 41.90895280004192, places=4)
+
+
+class TestSiemensS7(unittest.TestCase):
+    # ---- Tipi di dato
+    def test_lista_tipi_dato(self):
+        tipi = s7.lista_tipi_dato()
+        self.assertEqual(len(tipi), 25)
+        for atteso in ("Bool", "Int", "DInt", "Real", "LReal", "Time", "S5Time", "DTL", "String"):
+            self.assertIn(atteso, tipi)
+
+    def test_info_tipo_int_case_insensitive(self):
+        for nome in ("Int", "INT", " int "):
+            r = s7.info_tipo_dato(nome)
+            self.assertEqual(r["tipo"], "Int")
+            self.assertEqual(r["dimensione_bit"], 16)
+            self.assertEqual(r["dimensione_byte"], 2)
+            self.assertEqual(r["minimo"], "-32768")
+            self.assertEqual(r["massimo"], "32767")
+
+    def test_info_tipo_solo_s7_1500_e_dimensioni(self):
+        self.assertIn("Solo S7-1500", s7.info_tipo_dato("LInt")["disponibile_su"])
+        self.assertEqual(s7.info_tipo_dato("DTL")["dimensione_byte"], 12)
+        self.assertEqual(s7.info_tipo_dato("Bool")["dimensione_byte"], "1 bit")
+        self.assertEqual(s7.info_tipo_dato("String")["dimensione_byte"], 256)
+
+    def test_info_tipo_sconosciuto(self):
+        with self.assertRaises(ValueError):
+            s7.info_tipo_dato("Pippo")
+
+    # ---- Range e diagnosi analogica
+    def test_range_segnale_4_20(self):
+        r = s7.range_segnale("4-20 mA")
+        self.assertEqual(r["raw_nominale_min"], 5530)
+        self.assertEqual(r["raw_nominale_max"], 27648)
+        self.assertEqual(r["raw_overflow_da"], 32512)
+        self.assertEqual(r["raw_underflow_fino_a"], -4865)
+
+    def test_range_segnale_bipolare(self):
+        r = s7.range_segnale("±10 V")
+        self.assertEqual(r["raw_nominale_min"], -27648)
+        self.assertEqual(r["raw_underflow_fino_a"], -32513)
+
+    def test_range_segnale_sconosciuto(self):
+        with self.assertRaises(ValueError):
+            s7.range_segnale("0-5 V")
+
+    def test_diagnosi_stati_unipolare(self):
+        casi = [(0, "nominale"), (27648, "nominale"), (27649, "overrange"), (32511, "overrange"),
+                (32512, "overflow"), (32767, "overflow"), (-1, "underrange"), (-4864, "underrange"),
+                (-4865, "underflow"), (-32768, "underflow")]
+        for raw, atteso in casi:
+            self.assertEqual(s7.diagnosi_valore_grezzo(raw, "0-20 mA")["stato"], atteso, msg=str(raw))
+
+    def test_diagnosi_stati_4_20(self):
+        self.assertEqual(s7.diagnosi_valore_grezzo(5530, "4-20 mA")["stato"], "nominale")
+        self.assertEqual(s7.diagnosi_valore_grezzo(5529, "4-20 mA")["stato"], "underrange")
+        self.assertEqual(s7.diagnosi_valore_grezzo(-4865, "4-20 mA")["stato"], "underflow")
+        self.assertIn("rottura", s7.diagnosi_valore_grezzo(5000, "4-20 mA")["nota"])
+
+    def test_diagnosi_stati_bipolare(self):
+        self.assertEqual(s7.diagnosi_valore_grezzo(-27648, "±10 V")["stato"], "nominale")
+        self.assertEqual(s7.diagnosi_valore_grezzo(-27649, "±10 V")["stato"], "underrange")
+        self.assertEqual(s7.diagnosi_valore_grezzo(-32512, "±10 V")["stato"], "underrange")
+        self.assertEqual(s7.diagnosi_valore_grezzo(-32513, "±10 V")["stato"], "underflow")
+
+    def test_diagnosi_valido_e_errori(self):
+        self.assertTrue(s7.diagnosi_valore_grezzo(10000, "0-10 V")["valido"])
+        self.assertFalse(s7.diagnosi_valore_grezzo(30000, "0-10 V")["valido"])
+        with self.assertRaises(ValueError):
+            s7.diagnosi_valore_grezzo(40000, "0-10 V")
+
+    # ---- Scalatura
+    def test_scalatura_ingresso_4_20(self):
+        self.assertAlmostEqual(s7.scala_ingresso_analogico(5530, "4-20 mA", 0, 10)["valore_ingegneristico"], 0.0)
+        self.assertAlmostEqual(s7.scala_ingresso_analogico(27648, "4-20 mA", 0, 10)["valore_ingegneristico"], 10.0)
+        r = s7.scala_ingresso_analogico(16589, "4-20 mA", 0, 10)
+        self.assertAlmostEqual(r["valore_ingegneristico"], 5.0)
+        self.assertAlmostEqual(r["segnale_fisico"], 12.0)
+        self.assertEqual(r["unita_segnale"], "mA")
+
+    def test_scalatura_ingresso_limite_ed_estrapolazione(self):
+        limitato = s7.scala_ingresso_analogico(0, "4-20 mA", 0, 10, limita=True)
+        libero = s7.scala_ingresso_analogico(0, "4-20 mA", 0, 10, limita=False)
+        self.assertAlmostEqual(limitato["valore_ingegneristico"], 0.0)
+        # raw 0 sta sotto il minimo nominale 5530: norm = -5530/22118 (non esattamente -0.25)
+        self.assertAlmostEqual(libero["valore_ingegneristico"], -5530 * 10 / 22118)
+        self.assertAlmostEqual(libero["segnale_fisico"], 4 + (-5530 / 22118) * 16)
+        self.assertEqual(limitato["stato"], "underrange")
+
+    def test_scalatura_ingresso_bipolare(self):
+        r = s7.scala_ingresso_analogico(0, "±10 V", -100, 100)
+        self.assertAlmostEqual(r["valore_ingegneristico"], 0.0)
+        self.assertAlmostEqual(r["segnale_fisico"], 0.0)
+
+    def test_scalatura_estremi_uguali(self):
+        with self.assertRaises(ValueError):
+            s7.scala_ingresso_analogico(10000, "4-20 mA", 5, 5)
+        with self.assertRaises(ValueError):
+            s7.scala_uscita_analogica(5, "4-20 mA", 5, 5)
+
+    def test_scalatura_uscita(self):
+        self.assertEqual(s7.scala_uscita_analogica(5, "4-20 mA", 0, 10)["valore_grezzo"], 16589)
+        self.assertEqual(s7.scala_uscita_analogica(10, "4-20 mA", 0, 10)["valore_grezzo"], 27648)
+        self.assertEqual(s7.scala_uscita_analogica(50, "0-10 V", 0, 100)["valore_grezzo"], 13824)
+
+    def test_scalatura_uscita_fuori_campo(self):
+        limitato = s7.scala_uscita_analogica(12, "4-20 mA", 0, 10)
+        self.assertEqual(limitato["valore_grezzo"], 27648)
+        self.assertTrue(limitato["fuori_campo"])
+        libero = s7.scala_uscita_analogica(12, "4-20 mA", 0, 10, limita=False)
+        self.assertEqual(libero["valore_grezzo"], 32072)
+        self.assertFalse(libero["nel_campo_nominale"])
+        self.assertFalse(s7.scala_uscita_analogica(5, "4-20 mA", 0, 10)["fuori_campo"])
+
+    # ---- Indirizzi
+    def test_operando_assoluto(self):
+        r = s7.operando_assoluto("M", "Word", 10)
+        self.assertEqual((r["operando"], r["byte_iniziale"], r["byte_finale"], r["byte_occupati"]),
+                         ("%MW10", 10, 11, 2))
+        self.assertEqual(s7.operando_assoluto("Q", "Bool", 2, 5)["operando"], "%Q2.5")
+        self.assertEqual(s7.operando_assoluto("%I", "Byte", 0)["operando"], "%IB0")
+        r = s7.operando_assoluto("m", "DWord", 100)
+        self.assertEqual((r["operando"], r["byte_finale"]), ("%MD100", 103))
+        self.assertEqual(s7.operando_assoluto("M", "Real", 20)["operando"], "%MD20")
+
+    def test_operando_assoluto_errori(self):
+        with self.assertRaises(ValueError):
+            s7.operando_assoluto("X", "Word", 0)
+        with self.assertRaises(ValueError):
+            s7.operando_assoluto("M", "Bool", 0, 8)
+        with self.assertRaises(ValueError):
+            s7.operando_assoluto("M", "Word", -1)
+        with self.assertRaises(ValueError):
+            s7.operando_assoluto("M", "String", 0)
+
+    def test_intervallo_memoria(self):
+        r = s7.intervallo_memoria_s7("M", "Word", 10, 5)
+        self.assertEqual((r["primo_operando"], r["ultimo_operando"]), ("%MW10", "%MW18"))
+        self.assertEqual((r["byte_finale"], r["byte_occupati"], r["prossimo_byte_libero"]), (19, 10, 20))
+        r = s7.intervallo_memoria_s7("M", "Bool", 10, 4, bit_iniziale=6)
+        self.assertEqual((r["primo_operando"], r["ultimo_operando"], r["byte_occupati"]), ("%M10.6", "%M11.1", 2))
+        with self.assertRaises(ValueError):
+            s7.intervallo_memoria_s7("M", "Word", 0, 0)
+
+    # ---- Generatore SCL
+    def test_formatta_time(self):
+        self.assertEqual(s7._formatta_time(5000), "T#5s")
+        self.assertEqual(s7._formatta_time(90000), "T#1m_30s")
+        self.assertEqual(s7._formatta_time(250), "T#250ms")
+        self.assertEqual(s7._formatta_time(3661000), "T#1h_1m_1s")
+        self.assertEqual(s7._formatta_time(86400000), "T#1d")
+        with self.assertRaises(ValueError):
+            s7._formatta_time(0)
+        with self.assertRaises(ValueError):
+            s7._formatta_time(2147483648)
+
+    def test_letterali_real(self):
+        self.assertEqual(s7._lit_real(10), "10.0")
+        self.assertEqual(s7._lit_real(1e-5), "1.0E-05")
+        self.assertEqual(s7._lit_real(1e16), "1.0E+16")
+        self.assertEqual(s7._par(-5), "(-5.0)")
+
+    def test_riferimenti_variabili(self):
+        self.assertEqual(s7._rif("Raw", "x"), "#Raw")
+        self.assertEqual(s7._rif("#Raw", "x"), "#Raw")
+        self.assertEqual(s7._rif('"AI_Pressione"', "x"), '"AI_Pressione"')
+        for cattivo in ("", "  ", "1abc", "a b", "x;y", None):
+            with self.assertRaises(ValueError):
+                s7._rif(cattivo, "x")
+
+    def test_scl_scalatura_norm_scale(self):
+        r = s7.genera_scl_scalatura("Raw", "Val", "4-20 mA", 0, 10)
+        self.assertIn("#Norm := NORM_X(MIN := 5530, VALUE := #Raw, MAX := 27648);", r["codice"])
+        self.assertIn("#Val := SCALE_X(MIN := 0.0, VALUE := #Norm, MAX := 10.0);", r["codice"])
+        self.assertIn("#Diag_SottoMinimo := (#Raw < 5530);", r["codice"])
+        self.assertIn("Norm : Real;", r["dichiarazioni"])
+        self.assertNotIn("Raw_Int", r["codice"])
+
+    def test_scl_scalatura_tensione_senza_sotto_minimo(self):
+        r = s7.genera_scl_scalatura("Raw", "Val", "0-10 V", 0, 100)
+        self.assertNotIn("Diag_SottoMinimo", r["codice"])
+        self.assertIn("MIN := 0, VALUE := #Raw, MAX := 27648", r["codice"])
+
+    def test_scl_scalatura_word_e_formula(self):
+        r = s7.genera_scl_scalatura('"AI_P"', "Bar", "±10 V", -5, 5, metodo="formula", tipo_ingresso="Word")
+        self.assertIn('#Raw_Int := WORD_TO_INT("AI_P");', r["codice"])
+        self.assertIn("#Bar := -5.0 + (INT_TO_REAL(#Raw_Int) - (-27648.0)) * (5.0 - (-5.0)) / (27648.0 - (-27648.0));",
+                      r["codice"])
+        self.assertIn("Raw_Int : Int;", r["dichiarazioni"])
+        self.assertNotIn("NORM_X", r["codice"])
+        self.assertIn("#Raw_Int < -32512", r["codice"])
+
+    def test_scl_scalatura_senza_diagnostica_e_errori(self):
+        r = s7.genera_scl_scalatura("Raw", "Val", "4-20 mA", 0, 10, diagnostica=False)
+        self.assertNotIn("Diag_", r["codice"])
+        with self.assertRaises(ValueError):
+            s7.genera_scl_scalatura("Raw", "Val", "4-20 mA", 5, 5)
+        with self.assertRaises(ValueError):
+            s7.genera_scl_scalatura("Raw", "Val", "4-20 mA", 0, 10, metodo="altro")
+        with self.assertRaises(ValueError):
+            s7.genera_scl_scalatura("Raw", "Val", "4-20 mA", 0, 10, tipo_ingresso="Real")
+        with self.assertRaises(ValueError):
+            s7.genera_scl_scalatura("Raw", "Val", "9-99 mA", 0, 10)
+
+    def test_scl_timer(self):
+        r = s7.genera_scl_timer("ton", "Ritardo", "Start", 5000, uscita_q="Fatto", uscita_et="Trascorso")
+        self.assertIn("#Ritardo(IN := #Start, PT := T#5s);", r["codice"])
+        self.assertIn("#Fatto := #Ritardo.Q;", r["codice"])
+        self.assertIn("#Trascorso := #Ritardo.ET;", r["codice"])
+        self.assertIn("Ritardo : TON_TIME;", r["dichiarazioni"])
+
+    def test_scl_timer_tonr_richiede_reset(self):
+        r = s7.genera_scl_timer("TONR", "Acc", "Marcia", 60000, reset="Azzera")
+        self.assertIn("#Acc(IN := #Marcia, R := #Azzera, PT := T#1m);", r["codice"])
+        self.assertIn("Acc : TONR_TIME;", r["dichiarazioni"])
+        with self.assertRaises(ValueError):
+            s7.genera_scl_timer("TONR", "Acc", "Marcia", 60000)
+        with self.assertRaises(ValueError):
+            s7.genera_scl_timer("XYZ", "T1", "In", 1000)
+
+    def test_scl_contatori(self):
+        r = s7.genera_scl_contatore("CTU", "Cnt", 10, ingresso_su="Imp", reset="Rst", uscita_q="Pieno", uscita_valore="Val")
+        self.assertIn("#Cnt(CU := #Imp, R := #Rst, PV := 10);", r["codice"])
+        self.assertIn("#Pieno := #Cnt.Q;", r["codice"])
+        self.assertIn("Cnt : CTU_INT;", r["dichiarazioni"])
+        r = s7.genera_scl_contatore("CTD", "Cnt", 5, ingresso_giu="Imp", carica="Ld")
+        self.assertIn("#Cnt(CD := #Imp, LD := #Ld, PV := 5);", r["codice"])
+        r = s7.genera_scl_contatore("CTUD", "Cnt", 10, "Su", "Giu", "Rst", "Ld", uscita_q="Pieno")
+        self.assertIn("#Cnt(CU := #Su, CD := #Giu, R := #Rst, LD := #Ld, PV := 10);", r["codice"])
+        self.assertIn("#Pieno := #Cnt.QU;", r["codice"])
+
+    def test_scl_contatori_errori(self):
+        with self.assertRaises(ValueError):
+            s7.genera_scl_contatore("CTU", "Cnt", 40000, ingresso_su="Imp", reset="Rst")
+        with self.assertRaises(ValueError):
+            s7.genera_scl_contatore("CTU", "Cnt", 10, ingresso_su="Imp")
+        with self.assertRaises(ValueError):
+            s7.genera_scl_contatore("CTX", "Cnt", 10)
+
+    def test_scl_allarme_massima_senza_ritardo(self):
+        r = s7.genera_scl_allarme("Temp", 80, 5, "massima")
+        self.assertIn("IF #Temp >= 80.0 THEN", r["codice"])
+        self.assertIn("ELSIF #Temp <= 75.0 THEN", r["codice"])
+        self.assertIn("#Allarme := TRUE;", r["codice"])
+        self.assertNotIn("TON_TIME", r["dichiarazioni"])
+
+    def test_scl_allarme_minima_con_ritardo(self):
+        r = s7.genera_scl_allarme("Livello", 10, 2, "minima", ritardo_ms=3000, allarme="AllLivello")
+        self.assertIn("IF #Livello <= 10.0 THEN", r["codice"])
+        self.assertIn("ELSIF #Livello >= 12.0 THEN", r["codice"])
+        self.assertIn("#TempoIntervento(IN := #Condizione, PT := T#3s);", r["codice"])
+        self.assertIn("#AllLivello := #TempoIntervento.Q;", r["codice"])
+        self.assertIn("TempoIntervento : TON_TIME;", r["dichiarazioni"])
+
+    def test_scl_allarme_errori(self):
+        with self.assertRaises(ValueError):
+            s7.genera_scl_allarme("Temp", 80, -1)
+        with self.assertRaises(ValueError):
+            s7.genera_scl_allarme("Temp", 80, 5, "media")
+
+    # ---- Guida
+    def test_guida(self):
+        argomenti = s7.lista_argomenti_guida()
+        self.assertGreaterEqual(len(argomenti), 7)
+        for a in argomenti:
+            g = s7.guida(a)
+            self.assertEqual(g["titolo"], a)
+            self.assertTrue(g["testo"])
+            self.assertGreater(len(g["punti"]), 0)
+        with self.assertRaises(ValueError):
+            s7.guida("Inesistente")
 
 
 if __name__ == "__main__":

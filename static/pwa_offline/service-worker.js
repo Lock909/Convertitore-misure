@@ -82,6 +82,7 @@ const ASSET_APP = [
   "./py/vaso_espansione.py",
   "./py/illuminazione_emergenza.py",
   "./py/gruppo_frigo.py",
+  "./py/siemens_s7.py",
   "./py/bridge.py",
   "./CHANGELOG.md",
 ];

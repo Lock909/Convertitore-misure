@@ -19,6 +19,20 @@ documentate qui per completezza.
 - Tema chiaro per la PWA offline, oltre a quello scuro: di default segue l'impostazione del
   sistema operativo, e il pulsante 🌙/☀️ nell'header permette di forzare l'uno o l'altro; la
   scelta viene ricordata tra una sessione e l'altra.
+- Nuovo sistema di automazione **Siemens S7 / TIA Portal** (S7-1200/S7-1500), con 10 strumenti sia in
+  Streamlit che nella PWA: info sui tipi di dato (dimensione, intervallo, costanti, disponibilità per
+  CPU), diagnosi del valore analogico grezzo (nominale, overrange, overflow, underrange, underflow,
+  rottura filo), scalatura ingresso e uscita analogica (equivalente a NORM_X/SCALE_X), indirizzi
+  operandi (%I/%Q/%M) e intervalli di memoria, **generatore di codice SCL** (scalatura analogica con
+  diagnostica, timer TON/TOF/TP/TONR, contatori CTU/CTD/CTUD, allarme con isteresi e ritardo) e una
+  guida ai concetti base (indirizzamento, blocchi, timer/contatori, conversioni, analogici, SCL, DB).
+### Changed
+- Nuova categoria unica **Automazione** (PWA) / **PLC e Automazione** (Streamlit) che riunisce tutti i
+  sistemi di automazione, con una sottocategoria per ciascuno: GE PACSystems RX3i, GE Mark VIe e
+  Siemens S7 / TIA Portal. In Streamlit un selettore in cima alla sezione sceglie il sistema; la vecchia
+  sezione "Mark VI/VIe & ToolboxST" è stata assorbita e preferiti, cronologia e ricerca che la
+  usavano continuano a portare allo strumento giusto. Nella PWA le voci PLC (prima sotto "Sicurezza")
+  e Mark VIe sono ora sotto "Automazione", con sottogruppi richiudibili nel menu.
 ### Fixed
 - PWA: chi aveva già cronologia o progetti salvati senza un backup recente incontrava un errore
   JavaScript all'avvio (`GIORNI_SOGLIA_PROMEMORIA_BACKUP` usata prima di essere dichiarata), che

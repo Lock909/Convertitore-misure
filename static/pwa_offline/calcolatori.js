@@ -2501,7 +2501,8 @@ const CALCOLATORI = [
   },
   {
     id: "automz_info_tipo_dato",
-    categoria: "Sicurezza",
+    categoria: "Automazione",
+    sottocategoria: "GE PACSystems RX3i",
     titolo: "PLC — Info tipo dato (IEC 61131-3)",
     bridge: "automz_info_tipo_dato",
     campi: [
@@ -2514,7 +2515,8 @@ const CALCOLATORI = [
   },
   {
     id: "automz_scalatura",
-    categoria: "Sicurezza",
+    categoria: "Automazione",
+    sottocategoria: "GE PACSystems RX3i",
     titolo: "PLC — Scalatura analogica (raw → ingegneristico)",
     bridge: "automz_scalatura",
     campi: [
@@ -2530,7 +2532,8 @@ const CALCOLATORI = [
   },
   {
     id: "automz_scalatura_inversa",
-    categoria: "Sicurezza",
+    categoria: "Automazione",
+    sottocategoria: "GE PACSystems RX3i",
     titolo: "PLC — Scalatura inversa (ingegneristico → raw)",
     bridge: "automz_scalatura_inversa",
     campi: [
@@ -2544,7 +2547,8 @@ const CALCOLATORI = [
   },
   {
     id: "automz_esplosione_bits",
-    categoria: "Sicurezza",
+    categoria: "Automazione",
+    sottocategoria: "GE PACSystems RX3i",
     titolo: "PLC — Esplosione WORD in bit",
     bridge: "automz_esplosione_bits",
     campi: [
@@ -2555,7 +2559,8 @@ const CALCOLATORI = [
   },
   {
     id: "automz_componi_word",
-    categoria: "Sicurezza",
+    categoria: "Automazione",
+    sottocategoria: "GE PACSystems RX3i",
     titolo: "PLC — Composizione WORD da bit",
     bridge: "automz_componi_word",
     campi: [
@@ -2567,7 +2572,8 @@ const CALCOLATORI = [
   },
   {
     id: "automz_limiti_memoria",
-    categoria: "Sicurezza",
+    categoria: "Automazione",
+    sottocategoria: "GE PACSystems RX3i",
     titolo: "PLC — Intervallo indirizzi memoria (RX3i)",
     bridge: "automz_limiti_memoria",
     campi: [
@@ -3051,7 +3057,8 @@ const CALCOLATORI = [
   // ---------------------------------------------------------------- Mark VIe / Strumentazione
   {
     id: "rtd_resistenza",
-    categoria: "Mark VIe",
+    categoria: "Automazione",
+    sottocategoria: "GE Mark VIe",
     titolo: "RTD — temperatura → resistenza (IEC 60751)",
     bridge: "rtd_resistenza",
     campi: [
@@ -3062,7 +3069,8 @@ const CALCOLATORI = [
   },
   {
     id: "rtd_temperatura",
-    categoria: "Mark VIe",
+    categoria: "Automazione",
+    sottocategoria: "GE Mark VIe",
     titolo: "RTD — resistenza → temperatura (IEC 60751)",
     bridge: "rtd_temperatura",
     campi: [
@@ -3073,7 +3081,8 @@ const CALCOLATORI = [
   },
   {
     id: "termocoppia_mv",
-    categoria: "Mark VIe",
+    categoria: "Automazione",
+    sottocategoria: "GE Mark VIe",
     titolo: "Termocoppia — temperatura → mV (ITS-90)",
     bridge: "termocoppia_mv",
     campi: [
@@ -3085,7 +3094,8 @@ const CALCOLATORI = [
   },
   {
     id: "termocoppia_temp",
-    categoria: "Mark VIe",
+    categoria: "Automazione",
+    sottocategoria: "GE Mark VIe",
     titolo: "Termocoppia — mV → temperatura (ITS-90)",
     bridge: "termocoppia_temp",
     campi: [
@@ -3097,7 +3107,8 @@ const CALCOLATORI = [
   },
   {
     id: "voting_tmr",
-    categoria: "Mark VIe",
+    categoria: "Automazione",
+    sottocategoria: "GE Mark VIe",
     titolo: "Voting TMR 2oo3 (mediano)",
     bridge: "voting_tmr_mediano",
     campi: [
@@ -3110,7 +3121,8 @@ const CALCOLATORI = [
   },
   {
     id: "disponibilita_tmr",
-    categoria: "Mark VIe",
+    categoria: "Automazione",
+    sottocategoria: "GE Mark VIe",
     titolo: "Disponibilità TMR 2oo3 (modello didattico)",
     bridge: "disponibilita_tmr_2oo3",
     campi: [
@@ -3121,7 +3133,8 @@ const CALCOLATORI = [
   },
   {
     id: "corrente_tbci",
-    categoria: "Mark VIe",
+    categoria: "Automazione",
+    sottocategoria: "GE Mark VIe",
     titolo: "Corrente assorbita scheda TBCI",
     bridge: "corrente_assorbita_tbci",
     campi: [
@@ -3133,7 +3146,8 @@ const CALCOLATORI = [
   },
   {
     id: "derating_trly",
-    categoria: "Mark VIe",
+    categoria: "Automazione",
+    sottocategoria: "GE Mark VIe",
     titolo: "Derating corrente relè TRLYH1x",
     bridge: "corrente_derating_relay_trly",
     campi: [
@@ -3146,7 +3160,8 @@ const CALCOLATORI = [
   },
   {
     id: "loading_ionet",
-    categoria: "Mark VIe",
+    categoria: "Automazione",
+    sottocategoria: "GE Mark VIe",
     titolo: "Loading rete IONet (modello didattico semplificato)",
     bridge: "loading_ionet",
     nota: "Modello didattico semplificato: non riproduce il traffico IONet certificato GE.",
@@ -3160,6 +3175,191 @@ const CALCOLATORI = [
       { name: "byte_per_canale", label: "Byte utili per canale", type: "number", default: 4 },
     ],
     risultati: "dict",
+  },
+
+  // ---------------------------------------------------------------- Automazione — Siemens S7 / TIA Portal
+  {
+    id: "siemens_tipo_dato",
+    categoria: "Automazione",
+    sottocategoria: "Siemens S7 / TIA Portal",
+    titolo: "Siemens S7 — Info tipo di dato (TIA Portal)",
+    bridge: "siemens_tipo_dato",
+    nota: "Tipi di dato di S7-1200/S7-1500: dimensione, intervallo, formato delle costanti e disponibilità per famiglia di CPU. Verificare sul manuale della CPU in uso.",
+    campi: [
+      { name: "tipo", label: "Tipo di dato", type: "select", default: "Int", opzioni: [
+        "Bool", "Byte", "Word", "DWord", "LWord", "SInt", "USInt", "Int", "UInt", "DInt", "UDInt",
+        "LInt", "ULInt", "Real", "LReal", "Time", "LTime", "S5Time", "Date", "Time_Of_Day", "DTL",
+        "Char", "WChar", "String", "WString",
+      ] },
+    ],
+    risultati: "dict",
+  },
+  {
+    id: "siemens_diagnosi_analogica",
+    categoria: "Automazione",
+    sottocategoria: "Siemens S7 / TIA Portal",
+    titolo: "Siemens S7 — Diagnosi valore analogico grezzo",
+    bridge: "siemens_diagnosi_analogica",
+    nota: "Classifica il valore a 16 bit di un ingresso analogico: nominale, overrange, overflow, underrange, underflow (27648 = fondo scala nominale).",
+    campi: [
+      { name: "raw", label: "Valore grezzo (Int, -32768 … 32767)", type: "number", default: 16589, step: 1 },
+      { name: "tipo_segnale", label: "Tipo di segnale del canale", type: "select", default: "4-20 mA",
+        opzioni: ["0-20 mA", "4-20 mA", "0-10 V", "1-5 V", "±10 V", "±5 V", "±20 mA"] },
+    ],
+    risultati: "dict",
+  },
+  {
+    id: "siemens_scalatura_ingresso",
+    categoria: "Automazione",
+    sottocategoria: "Siemens S7 / TIA Portal",
+    titolo: "Siemens S7 — Scalatura ingresso analogico (raw → ingegneristico)",
+    bridge: "siemens_scalatura_ingresso",
+    nota: "Equivale a NORM_X + SCALE_X. Con il limite attivo il risultato resta tra i due estremi (come nelle istruzioni Siemens), il che può nascondere un guasto: controllare anche lo stato.",
+    campi: [
+      { name: "raw", label: "Valore grezzo", type: "number", default: 16589, step: 1 },
+      { name: "tipo_segnale", label: "Tipo di segnale del canale", type: "select", default: "4-20 mA",
+        opzioni: ["0-20 mA", "4-20 mA", "0-10 V", "1-5 V", "±10 V", "±5 V", "±20 mA"] },
+      { name: "eng_min", label: "Valore ingegneristico minimo", type: "number", default: 0 },
+      { name: "eng_max", label: "Valore ingegneristico massimo", type: "number", default: 10 },
+      { name: "limita", label: "Limita il risultato tra minimo e massimo (come NORM_X/SCALE_X)", type: "checkbox", default: true },
+    ],
+    risultati: "dict",
+  },
+  {
+    id: "siemens_scalatura_uscita",
+    categoria: "Automazione",
+    sottocategoria: "Siemens S7 / TIA Portal",
+    titolo: "Siemens S7 — Scalatura uscita analogica (ingegneristico → raw)",
+    bridge: "siemens_scalatura_uscita",
+    nota: "Valore grezzo da scrivere su un'uscita analogica per ottenere il setpoint desiderato.",
+    campi: [
+      { name: "valore", label: "Valore ingegneristico (setpoint)", type: "number", default: 5 },
+      { name: "tipo_segnale", label: "Tipo di segnale dell'uscita", type: "select", default: "4-20 mA",
+        opzioni: ["0-20 mA", "4-20 mA", "0-10 V", "1-5 V", "±10 V", "±5 V", "±20 mA"] },
+      { name: "eng_min", label: "Valore ingegneristico minimo", type: "number", default: 0 },
+      { name: "eng_max", label: "Valore ingegneristico massimo", type: "number", default: 10 },
+      { name: "limita", label: "Limita il setpoint tra minimo e massimo", type: "checkbox", default: true },
+    ],
+    risultati: "dict",
+  },
+  {
+    id: "siemens_indirizzo",
+    categoria: "Automazione",
+    sottocategoria: "Siemens S7 / TIA Portal",
+    titolo: "Siemens S7 — Indirizzi operandi (%I/%Q/%M)",
+    bridge: "siemens_indirizzo",
+    nota: "Con quantità 1 dà l'operando assoluto e i byte occupati; con quantità maggiore, primo e ultimo operando di un blocco contiguo. Le word usano l'ordine big-endian: %MW10 occupa %MB10 e %MB11.",
+    campi: [
+      { name: "area", label: "Area di memoria", type: "select", default: "M", opzioni: ["I", "Q", "M"] },
+      { name: "tipo", label: "Tipo", type: "select", default: "Word",
+        opzioni: ["Bool", "Byte", "Word", "DWord", "Int", "DInt", "Real"] },
+      { name: "byte", label: "Indirizzo di byte", type: "number", default: 10, step: 1 },
+      { name: "bit", label: "Bit iniziale (solo per Bool, 0-7)", type: "number", default: 0, step: 1 },
+      { name: "quantita", label: "Quantità di variabili contigue", type: "number", default: 1, step: 1 },
+    ],
+    risultati: "dict",
+  },
+  {
+    id: "siemens_scl_scalatura",
+    categoria: "Automazione",
+    sottocategoria: "Siemens S7 / TIA Portal",
+    titolo: "Siemens S7 — Generatore SCL: scalatura analogica",
+    bridge: "siemens_scl_scalatura",
+    senzaConfronto: true,
+    nota: "Genera codice SCL per scalare un ingresso analogico, con diagnostica opzionale. Da incollare in un blocco e provare in TIA Portal.",
+    campi: [
+      { name: "ingresso", label: "Variabile grezza (es. Pressione_Raw, oppure \"Tag\" tra virgolette)", type: "text", default: "Pressione_Raw" },
+      { name: "uscita", label: "Variabile scalata (Real)", type: "text", default: "Pressione_Bar" },
+      { name: "tipo_segnale", label: "Tipo di segnale", type: "select", default: "4-20 mA",
+        opzioni: ["0-20 mA", "4-20 mA", "0-10 V", "1-5 V", "±10 V", "±5 V", "±20 mA"] },
+      { name: "eng_min", label: "Valore ingegneristico minimo", type: "number", default: 0 },
+      { name: "eng_max", label: "Valore ingegneristico massimo", type: "number", default: 10 },
+      { name: "metodo", label: "Metodo", type: "select", default: "norm_scale", opzioni: ["norm_scale", "formula"],
+        nota: "norm_scale = NORM_X + SCALE_X (con limite); formula = calcolo lineare senza limite." },
+      { name: "tipo_ingresso", label: "Tipo della variabile grezza", type: "select", default: "Int", opzioni: ["Int", "Word"],
+        nota: "Gli ingressi periferici %IW sono Word: il codice li converte con WORD_TO_INT." },
+      { name: "diagnostica", label: "Aggiungi la diagnostica del valore grezzo", type: "checkbox", default: true },
+    ],
+    risultati: "testo_codice",
+  },
+  {
+    id: "siemens_scl_timer",
+    categoria: "Automazione",
+    sottocategoria: "Siemens S7 / TIA Portal",
+    titolo: "Siemens S7 — Generatore SCL: timer IEC",
+    bridge: "siemens_scl_timer",
+    senzaConfronto: true,
+    nota: "Chiamata SCL di un timer TON, TOF, TP o TONR con la relativa dichiarazione.",
+    campi: [
+      { name: "tipo", label: "Tipo di timer", type: "select", default: "TON", opzioni: ["TON", "TOF", "TP", "TONR"] },
+      { name: "istanza", label: "Nome istanza", type: "text", default: "Ritardo" },
+      { name: "ingresso", label: "Variabile di ingresso IN", type: "text", default: "Start" },
+      { name: "tempo_ms", label: "Tempo preimpostato PT [ms]", type: "number", default: 5000, step: 1 },
+      { name: "reset", label: "Variabile di reset R (solo TONR)", type: "text", default: "" },
+      { name: "uscita_q", label: "Variabile per l'uscita Q (opzionale)", type: "text", default: "Fatto" },
+      { name: "uscita_et", label: "Variabile per il tempo trascorso ET (opzionale)", type: "text", default: "" },
+    ],
+    risultati: "testo_codice",
+  },
+  {
+    id: "siemens_scl_contatore",
+    categoria: "Automazione",
+    sottocategoria: "Siemens S7 / TIA Portal",
+    titolo: "Siemens S7 — Generatore SCL: contatori IEC",
+    bridge: "siemens_scl_contatore",
+    senzaConfronto: true,
+    nota: "Chiamata SCL di un contatore CTU, CTD o CTUD a 16 bit. CTU richiede ingresso di conteggio e reset; CTD ingresso e caricamento; CTUD tutti e quattro.",
+    campi: [
+      { name: "tipo", label: "Tipo di contatore", type: "select", default: "CTU", opzioni: ["CTU", "CTD", "CTUD"] },
+      { name: "istanza", label: "Nome istanza", type: "text", default: "Contatore" },
+      { name: "preset", label: "Valore di preset PV (0-32767)", type: "number", default: 10, step: 1 },
+      { name: "ingresso_su", label: "Ingresso di conteggio in avanti CU (CTU, CTUD)", type: "text", default: "Impulso" },
+      { name: "ingresso_giu", label: "Ingresso di conteggio indietro CD (CTD, CTUD)", type: "text", default: "" },
+      { name: "reset", label: "Reset R (CTU, CTUD)", type: "text", default: "Reset" },
+      { name: "carica", label: "Caricamento LD (CTD, CTUD)", type: "text", default: "" },
+      { name: "uscita_q", label: "Variabile per l'uscita Q/QU (opzionale)", type: "text", default: "Raggiunto" },
+      { name: "uscita_valore", label: "Variabile per il valore CV (opzionale)", type: "text", default: "Valore" },
+    ],
+    risultati: "testo_codice",
+  },
+  {
+    id: "siemens_scl_allarme",
+    categoria: "Automazione",
+    sottocategoria: "Siemens S7 / TIA Portal",
+    titolo: "Siemens S7 — Generatore SCL: allarme con isteresi",
+    bridge: "siemens_scl_allarme",
+    senzaConfronto: true,
+    nota: "Allarme di massima o di minima con isteresi ed eventuale ritardo di intervento (TON).",
+    campi: [
+      { name: "valore", label: "Variabile misurata (Real)", type: "text", default: "Temperatura" },
+      { name: "soglia", label: "Soglia di intervento", type: "number", default: 80 },
+      { name: "isteresi", label: "Isteresi (≥ 0)", type: "number", default: 5 },
+      { name: "tipo", label: "Tipo di allarme", type: "select", default: "massima", opzioni: ["massima", "minima"] },
+      { name: "ritardo_ms", label: "Ritardo di intervento [ms] (0 = nessuno)", type: "number", default: 0, step: 1 },
+      { name: "allarme", label: "Variabile di allarme (Bool)", type: "text", default: "Allarme" },
+    ],
+    risultati: "testo_codice",
+  },
+  {
+    id: "siemens_guida",
+    categoria: "Automazione",
+    sottocategoria: "Siemens S7 / TIA Portal",
+    titolo: "Siemens S7 — Guida ai concetti base",
+    bridge: "siemens_guida",
+    senzaConfronto: true,
+    nota: "Note esplicative su indirizzamento, blocchi, timer/contatori, tipi di dato, analogici, SCL e blocchi dati.",
+    campi: [
+      { name: "argomento", label: "Argomento", type: "select", default: "Indirizzamento (%I, %Q, %M, DB)", opzioni: [
+        "Indirizzamento (%I, %Q, %M, DB)",
+        "Blocchi di programma (OB, FC, FB, DB)",
+        "Timer e contatori IEC",
+        "Tipi di dato e conversioni",
+        "Valori analogici e scalatura",
+        "SCL — sintassi essenziale",
+        "Accesso ai DB: standard e ottimizzato",
+      ] },
+    ],
+    risultati: "testo_codice",
   },
 
   // ---------------------------------------------------------------- Batterie

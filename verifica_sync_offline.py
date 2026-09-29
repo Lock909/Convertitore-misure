@@ -86,6 +86,7 @@ MODULI_DUPLICATI = [
     "vaso_espansione.py",
     "illuminazione_emergenza.py",
     "gruppo_frigo.py",
+    "siemens_s7.py",
 ]
 
 

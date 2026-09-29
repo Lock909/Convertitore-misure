@@ -31,6 +31,7 @@ import atex
 import vaso_espansione
 import illuminazione_emergenza
 import gruppo_frigo
+import siemens_s7
 import vibrazioni
 import pneumatica
 import trasmissioni
@@ -494,6 +495,31 @@ _IS_MOBILE = is_mobile()
 # Copia delle liste passate ai selectbox "Seleziona Strumento" di ogni sezione:
 # se si aggiunge un'opzione lì, aggiungerla anche qui per mantenerla cercabile.
 
+# Sezione unica "PLC e Automazione": un sistema di automazione alla volta.
+# Mark VIe era una sezione separata; le voci salvate con il vecchio nome
+# (preferiti, cronologia, ricerca) vengono reindirizzate qui sotto.
+_SEZ_PLC = "🤖  PLC e Automazione"
+_SEZ_MARK = "🎛️  Mark VI/VIe & ToolboxST"
+_SISTEMA_RX3I = "GE PACSystems RX3i"
+_SISTEMA_MARK = "GE Mark VIe / ToolboxST"
+_SISTEMA_SIEMENS = "Siemens S7 / TIA Portal"
+_SISTEMI_AUTOMAZIONE = [_SISTEMA_RX3I, _SISTEMA_MARK, _SISTEMA_SIEMENS]
+_SISTEMA_PER_CHIAVE_TOOL = {"plc_tool": _SISTEMA_RX3I, "mv_tool": _SISTEMA_MARK, "siemens_tool": _SISTEMA_SIEMENS}
+
+_SIEMENS_TOOLS = [
+    "Tipi di Dato S7",
+    "Valori Analogici — Diagnosi Raw",
+    "Scalatura Ingresso Analogico (Raw → Ingegneristico)",
+    "Scalatura Uscita Analogica (Ingegneristico → Raw)",
+    "Indirizzi Operandi (%I/%Q/%M)",
+    "Generatore SCL — Scalatura Analogica",
+    "Generatore SCL — Timer IEC",
+    "Generatore SCL — Contatori IEC",
+    "Generatore SCL — Allarme con Isteresi",
+    "Guida ai Concetti Base S7",
+]
+
+
 def _build_tool_index() -> list:
     idx = []
 
@@ -528,6 +554,8 @@ def _build_tool_index() -> list:
         "Scalatura Analogica (Raw -> Engineering)", "Scalatura Inversa (Engineering -> Raw / Setpoint)",
         "Esplosione Parola nei Bit", "Composizione WORD da Bit", "Calcolo Memoria RX3i",
     ], "🤖  PLC e Automazione", "plc_tool")
+
+    _add(_SIEMENS_TOOLS, "🤖  PLC e Automazione", "siemens_tool")
 
     _add([
         "Conversione Grandezze Vibrazionali", "Classificazione ISO 10816 (Severita)",
@@ -964,12 +992,15 @@ _SEZIONI = [
     "🔧  Pneumatica & Strumenti",
     "🌡️  Termotecnica & Impianti",
     "🔒  Sicurezza & Utilities",
-    "🎛️  Mark VI/VIe & ToolboxST",
     "📁  Progetti Salvati",
 ]
 
 if "_nav_goto" in st.session_state:
     dest = st.session_state.pop("_nav_goto")
+    if dest == _SEZ_MARK:
+        # Sezione fusa in "PLC e Automazione": preferiti/cronologia salvati con il vecchio nome.
+        st.session_state["plc_sistema"] = _SISTEMA_MARK
+        dest = _SEZ_PLC
     if dest in _SEZIONI:
         st.session_state["sidebar_cat"] = dest
 
@@ -978,6 +1009,8 @@ if "_nav_tool_key" in st.session_state:
     _tv = st.session_state.pop("_nav_tool_val", None)
     if _tk and _tv is not None:
         st.session_state[_tk] = _tv
+        if _tk in _SISTEMA_PER_CHIAVE_TOOL:
+            st.session_state["plc_sistema"] = _SISTEMA_PER_CHIAVE_TOOL[_tk]
 
 _mostra_banner_novita()
 
@@ -1087,8 +1120,28 @@ _NAV_MAP = {
     "🔩  Meccanica":                "🔩  Meccanica",
     "🔧  Pneumatica & Strumenti":   "🔧  Pneumatica & Strumenti",
     "🌡️  Termotecnica & Impianti":  "🌡️  Termotecnica & Impianti",
-    "🎛️  Mark VI/VIe & ToolboxST":  "🎛️  Mark VI/VIe & ToolboxST",
 }
+
+def _mostra_codice_scl(r: dict) -> None:
+    """Mostra dichiarazioni, codice SCL (con pulsante copia integrato in st.code) e note."""
+    st.markdown("**Codice SCL**")
+    st.code(r["codice"], language="pascal")
+    if r.get("dichiarazioni"):
+        st.markdown("**Dichiarazioni (interfaccia del blocco)**")
+        st.code(r["dichiarazioni"], language="pascal")
+    for nota in r.get("note", []):
+        st.caption(f"• {nota}")
+
+
+_sistema_plc = None
+if categoria == _SEZ_PLC:
+    if st.session_state.get("plc_sistema") not in _SISTEMI_AUTOMAZIONE:
+        st.session_state["plc_sistema"] = _SISTEMA_RX3I
+    _sistema_plc = st.radio(
+        "Sistema di automazione", _SISTEMI_AUTOMAZIONE, horizontal=True, key="plc_sistema",
+    )
+    if _sistema_plc == _SISTEMA_MARK:
+        categoria = _SEZ_MARK  # riusa la sezione Mark VIe più sotto nella catena
 
 if categoria == "🏠  Home":
     st.title("⚙️ Strumento Multifunzione Industriale")
@@ -1120,13 +1173,12 @@ if categoria == "🏠  Home":
     _HOME_CARDS = [
         ("⚖️", "Conversioni",          "⚖️  Conversioni",            "Unità, pressione, temperatura", "Universale"),
         ("⚡", "Calcoli Elettrici",    "⚡  Calcoli Elettrici",       "Ohm, motori, sezioni, IE",      "CEI 64-8"),
-        ("🤖", "PLC e Automazione",    "🤖  PLC e Automazione",       "GE RX3i, scalature, tipi dato", "IEC 61131-3"),
+        ("🤖", "PLC e Automazione",    "🤖  PLC e Automazione",       "RX3i, Mark VIe, Siemens S7/SCL", "IEC 61131-3"),
         ("〜", "Vibrazioni",           "〜  Vibrazioni",              "ISO 10816, squilibrio rotori",  "ISO 10816"),
         ("🔩", "Meccanica",            "🔩  Meccanica",               "Travi, pompe, bulloni, trasm.", "ISO 898-1"),
         ("🔧", "Pneumatica & Strum.",  "🔧  Pneumatica & Strumenti",  "Aria compressa, TC, Pt100",     "IEC 60751"),
         ("🌡️", "Termotecnica",         "🌡️  Termotecnica & Impianti", "Scambiatori, illuminotecnica",  "EN 12464-1"),
         ("🔒", "Sicurezza & Utilities","🔒  Sicurezza & Utilities",   "Rumore, serbatoi, valvole, UPS","ISO 9612"),
-        ("🎛️", "Mark VI/VIe",          "🎛️  Mark VI/VIe & ToolboxST", "Schede I/O, TMR, ToolboxST",    "GEH-6721"),
     ]
 
     if filtro_home:
@@ -4245,8 +4297,245 @@ elif categoria == "⚡  Calcoli Elettrici":
             )
 
 
+elif categoria == _SEZ_PLC and _sistema_plc == _SISTEMA_SIEMENS:
+    _card_open("plc", "🤖 Siemens S7 / TIA Portal", "IEC 61131-3")
+    tool_s7 = st.selectbox("Seleziona Strumento:", _SIEMENS_TOOLS, key="siemens_tool")
+    _render_fav_toggle(_SEZ_PLC, "siemens_tool", tool_s7)
+    st.caption(
+        "S7-1200 / S7-1500 con TIA Portal. I valori sono quelli pubblicati da Siemens e variano con "
+        "famiglia di CPU e firmware: verificare sempre sul manuale della CPU in uso."
+    )
+
+    if tool_s7 == "Tipi di Dato S7":
+        st.subheader("Tipi di dato S7-1200 / S7-1500")
+        tipo_s7 = st.selectbox("Tipo di dato:", siemens_s7.lista_tipi_dato(),
+                               index=siemens_s7.lista_tipi_dato().index("Int"), key="s7_tipo")
+        info_s7 = siemens_s7.info_tipo_dato(tipo_s7)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Dimensione", f"{info_s7['dimensione_bit']} bit"
+                  + ("" if info_s7["dimensione_byte"] == "1 bit" else f" ({info_s7['dimensione_byte']} byte)"))
+        c2.metric("Categoria", info_s7["categoria"])
+        c3.metric("Disponibile su", info_s7["disponibile_su"])
+        c1, c2 = st.columns(2)
+        c1.write(f"**Minimo:** `{info_s7['minimo']}`")
+        c2.write(f"**Massimo:** `{info_s7['massimo']}`")
+        st.write(f"**Esempio di costante:** `{info_s7['esempio_costante']}`")
+        if info_s7["note"]:
+            st.info(info_s7["note"])
+
+    elif tool_s7 == "Valori Analogici — Diagnosi Raw":
+        st.subheader("Diagnosi del valore analogico grezzo")
+        col1, col2 = st.columns(2)
+        with col1:
+            raw_s7 = st.number_input("Valore grezzo (Int, -32768 … 32767):", value=16589, min_value=-32768,
+                                     max_value=32767, step=1, key="s7_diag_raw")
+        with col2:
+            seg_s7 = st.selectbox("Tipo di segnale del canale:", siemens_s7.lista_tipi_segnale(),
+                                  index=1, key="s7_diag_seg")
+        try:
+            d_s7 = siemens_s7.diagnosi_valore_grezzo(raw_s7, seg_s7)
+            rg = siemens_s7.range_segnale(seg_s7)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Stato", d_s7["stato"])
+            c2.metric("Campo nominale", f"{rg['raw_nominale_min']} … {rg['raw_nominale_max']}")
+            c3.metric("Segnale", f"{rg['segnale_min']:g} … {rg['segnale_max']:g} {rg['unita_segnale']}")
+            (st.success if d_s7["valido"] else st.warning)(d_s7["nota"])
+            st.caption(
+                f"Overrange fino a {rg['raw_overrange_max']}, overflow da {rg['raw_overflow_da']}; "
+                f"underflow per valori ≤ {rg['raw_underflow_fino_a']}."
+            )
+        except ValueError as e:
+            st.error(str(e))
+
+    elif tool_s7 == "Scalatura Ingresso Analogico (Raw → Ingegneristico)":
+        st.subheader("Scalatura ingresso analogico (equivale a NORM_X + SCALE_X)")
+        col1, col2 = st.columns(2)
+        with col1:
+            raw_s7 = st.number_input("Valore grezzo:", value=16589, min_value=-32768, max_value=32767,
+                                     step=1, key="s7_sc_raw")
+            seg_s7 = st.selectbox("Tipo di segnale del canale:", siemens_s7.lista_tipi_segnale(),
+                                  index=1, key="s7_sc_seg")
+            lim_s7 = st.checkbox("Limita il risultato tra minimo e massimo (come NORM_X/SCALE_X)",
+                                 value=True, key="s7_sc_lim",
+                                 help="Il limite può nascondere un guasto: controllare anche lo stato.")
+        with col2:
+            emin_s7 = st.number_input("Valore ingegneristico minimo:", value=0.0, key="s7_sc_emin")
+            emax_s7 = st.number_input("Valore ingegneristico massimo:", value=10.0, key="s7_sc_emax")
+        try:
+            r_s7 = siemens_s7.scala_ingresso_analogico(raw_s7, seg_s7, emin_s7, emax_s7, lim_s7)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Valore ingegneristico", f"{r_s7['valore_ingegneristico']:.4f}")
+            c2.metric("Segnale", f"{r_s7['segnale_fisico']:.3f} {r_s7['unita_segnale']}")
+            c3.metric("Stato", r_s7["stato"])
+            (st.success if r_s7["valido"] else st.warning)(r_s7["nota"])
+            _export_csv_button(
+                "Siemens S7 — Scalatura ingresso analogico",
+                {"Valore grezzo": raw_s7, "Segnale": seg_s7, "Minimo ing.": emin_s7, "Massimo ing.": emax_s7,
+                 "Valore ingegneristico": f"{r_s7['valore_ingegneristico']:.4f}",
+                 "Segnale fisico": f"{r_s7['segnale_fisico']:.3f} {r_s7['unita_segnale']}",
+                 "Stato": r_s7["stato"]},
+                key="s7_sc_export",
+            )
+        except ValueError as e:
+            st.error(str(e))
+
+    elif tool_s7 == "Scalatura Uscita Analogica (Ingegneristico → Raw)":
+        st.subheader("Scalatura uscita analogica: setpoint → valore grezzo")
+        col1, col2 = st.columns(2)
+        with col1:
+            val_s7 = st.number_input("Valore ingegneristico (setpoint):", value=5.0, key="s7_us_val")
+            seg_s7 = st.selectbox("Tipo di segnale dell'uscita:", siemens_s7.lista_tipi_segnale(),
+                                  index=1, key="s7_us_seg")
+            lim_s7 = st.checkbox("Limita il setpoint tra minimo e massimo", value=True, key="s7_us_lim")
+        with col2:
+            emin_s7 = st.number_input("Valore ingegneristico minimo:", value=0.0, key="s7_us_emin")
+            emax_s7 = st.number_input("Valore ingegneristico massimo:", value=10.0, key="s7_us_emax")
+        try:
+            r_s7 = siemens_s7.scala_uscita_analogica(val_s7, seg_s7, emin_s7, emax_s7, lim_s7)
+            c1, c2 = st.columns(2)
+            c1.metric("Valore grezzo da scrivere", f"{r_s7['valore_grezzo']}")
+            c2.metric("Segnale", f"{r_s7['segnale_fisico']:.3f} {r_s7['unita_segnale']}")
+            if r_s7["fuori_campo"]:
+                st.warning("Il setpoint è fuori dal campo tra minimo e massimo"
+                           + (": è stato limitato." if lim_s7 else ": il valore grezzo è estrapolato."))
+            if not r_s7["nel_campo_nominale"]:
+                st.warning("Il valore grezzo esce dal campo nominale del modulo.")
+            _export_csv_button(
+                "Siemens S7 — Scalatura uscita analogica",
+                {"Setpoint": val_s7, "Segnale": seg_s7, "Minimo ing.": emin_s7, "Massimo ing.": emax_s7,
+                 "Valore grezzo": r_s7["valore_grezzo"],
+                 "Segnale fisico": f"{r_s7['segnale_fisico']:.3f} {r_s7['unita_segnale']}"},
+                key="s7_us_export",
+            )
+        except ValueError as e:
+            st.error(str(e))
+
+    elif tool_s7 == "Indirizzi Operandi (%I/%Q/%M)":
+        st.subheader("Indirizzi assoluti degli operandi")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            area_s7 = st.selectbox("Area di memoria:", ["I", "Q", "M"], index=2, key="s7_ind_area")
+            tipo_s7 = st.selectbox("Tipo:", ["Bool", "Byte", "Word", "DWord", "Int", "DInt", "Real"],
+                                   index=2, key="s7_ind_tipo")
+        with col2:
+            byte_s7 = st.number_input("Indirizzo di byte:", value=10, min_value=0, step=1, key="s7_ind_byte")
+            bit_s7 = st.number_input("Bit iniziale (solo Bool, 0-7):", value=0, min_value=0, max_value=7,
+                                     step=1, key="s7_ind_bit")
+        with col3:
+            qta_s7 = st.number_input("Quantità di variabili contigue:", value=1, min_value=1, step=1,
+                                     key="s7_ind_qta")
+        try:
+            if qta_s7 == 1:
+                r_s7 = siemens_s7.operando_assoluto(area_s7, tipo_s7, byte_s7, bit_s7)
+                c1, c2 = st.columns(2)
+                c1.metric("Operando", r_s7["operando"])
+                c2.metric("Byte occupati", f"{r_s7['byte_iniziale']} … {r_s7['byte_finale']}")
+                if r_s7["note"]:
+                    st.info(r_s7["note"])
+            else:
+                r_s7 = siemens_s7.intervallo_memoria_s7(area_s7, tipo_s7, byte_s7, qta_s7, bit_s7)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Primo operando", r_s7["primo_operando"])
+                c2.metric("Ultimo operando", r_s7["ultimo_operando"])
+                c3.metric("Prossimo byte libero", r_s7["prossimo_byte_libero"])
+                st.write(f"Byte occupati: {r_s7['byte_occupati']} (da {r_s7['byte_iniziale']} a {r_s7['byte_finale']}).")
+        except ValueError as e:
+            st.error(str(e))
+
+    elif tool_s7 == "Generatore SCL — Scalatura Analogica":
+        st.subheader("Generatore SCL: scalatura ingresso analogico")
+        col1, col2 = st.columns(2)
+        with col1:
+            in_s7 = st.text_input("Variabile grezza (es. Pressione_Raw, oppure \"Tag\" tra virgolette):",
+                                  value="Pressione_Raw", key="s7_gs_in")
+            out_s7 = st.text_input("Variabile scalata (Real):", value="Pressione_Bar", key="s7_gs_out")
+            seg_s7 = st.selectbox("Tipo di segnale:", siemens_s7.lista_tipi_segnale(), index=1, key="s7_gs_seg")
+            diag_s7 = st.checkbox("Aggiungi la diagnostica del valore grezzo", value=True, key="s7_gs_diag")
+        with col2:
+            emin_s7 = st.number_input("Valore ingegneristico minimo:", value=0.0, key="s7_gs_emin")
+            emax_s7 = st.number_input("Valore ingegneristico massimo:", value=10.0, key="s7_gs_emax")
+            met_s7 = st.radio("Metodo:", ["norm_scale", "formula"], horizontal=True, key="s7_gs_met",
+                              help="norm_scale = NORM_X + SCALE_X (con limite); formula = calcolo lineare senza limite.")
+            tin_s7 = st.radio("Tipo della variabile grezza:", ["Int", "Word"], horizontal=True, key="s7_gs_tin",
+                              help="Gli ingressi periferici %IW sono Word: il codice li converte con WORD_TO_INT.")
+        try:
+            _mostra_codice_scl(siemens_s7.genera_scl_scalatura(
+                in_s7, out_s7, seg_s7, emin_s7, emax_s7, metodo=met_s7, tipo_ingresso=tin_s7, diagnostica=diag_s7))
+        except ValueError as e:
+            st.error(str(e))
+
+    elif tool_s7 == "Generatore SCL — Timer IEC":
+        st.subheader("Generatore SCL: timer IEC (TON, TOF, TP, TONR)")
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo_s7 = st.selectbox("Tipo di timer:", ["TON", "TOF", "TP", "TONR"], key="s7_gt_tipo")
+            ist_s7 = st.text_input("Nome istanza:", value="Ritardo", key="s7_gt_ist")
+            in_s7 = st.text_input("Variabile di ingresso IN:", value="Start", key="s7_gt_in")
+            ms_s7 = st.number_input("Tempo preimpostato PT [ms]:", value=5000, min_value=1, step=1, key="s7_gt_ms")
+        with col2:
+            rst_s7 = st.text_input("Variabile di reset R (solo TONR):", value="", key="s7_gt_rst")
+            q_s7 = st.text_input("Variabile per l'uscita Q (opzionale):", value="Fatto", key="s7_gt_q")
+            et_s7 = st.text_input("Variabile per il tempo trascorso ET (opzionale):", value="", key="s7_gt_et")
+        try:
+            _mostra_codice_scl(siemens_s7.genera_scl_timer(
+                tipo_s7, ist_s7, in_s7, ms_s7, reset=rst_s7.strip() or None,
+                uscita_q=q_s7.strip() or None, uscita_et=et_s7.strip() or None))
+        except ValueError as e:
+            st.error(str(e))
+
+    elif tool_s7 == "Generatore SCL — Contatori IEC":
+        st.subheader("Generatore SCL: contatori IEC (CTU, CTD, CTUD)")
+        st.caption("CTU richiede ingresso di conteggio e reset; CTD ingresso e caricamento; CTUD tutti e quattro.")
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo_s7 = st.selectbox("Tipo di contatore:", ["CTU", "CTD", "CTUD"], key="s7_gc_tipo")
+            ist_s7 = st.text_input("Nome istanza:", value="Contatore", key="s7_gc_ist")
+            pv_s7 = st.number_input("Valore di preset PV (0-32767):", value=10, min_value=0, max_value=32767,
+                                    step=1, key="s7_gc_pv")
+            q_s7 = st.text_input("Variabile per l'uscita Q/QU (opzionale):", value="Raggiunto", key="s7_gc_q")
+            cv_s7 = st.text_input("Variabile per il valore CV (opzionale):", value="Valore", key="s7_gc_cv")
+        with col2:
+            su_s7 = st.text_input("Ingresso di conteggio in avanti CU (CTU, CTUD):", value="Impulso", key="s7_gc_su")
+            giu_s7 = st.text_input("Ingresso di conteggio indietro CD (CTD, CTUD):", value="", key="s7_gc_giu")
+            rst_s7 = st.text_input("Reset R (CTU, CTUD):", value="Reset", key="s7_gc_rst")
+            ld_s7 = st.text_input("Caricamento LD (CTD, CTUD):", value="", key="s7_gc_ld")
+        try:
+            _mostra_codice_scl(siemens_s7.genera_scl_contatore(
+                tipo_s7, ist_s7, pv_s7, ingresso_su=su_s7.strip() or None, ingresso_giu=giu_s7.strip() or None,
+                reset=rst_s7.strip() or None, carica=ld_s7.strip() or None,
+                uscita_q=q_s7.strip() or None, uscita_valore=cv_s7.strip() or None))
+        except ValueError as e:
+            st.error(str(e))
+
+    elif tool_s7 == "Generatore SCL — Allarme con Isteresi":
+        st.subheader("Generatore SCL: allarme con isteresi")
+        col1, col2 = st.columns(2)
+        with col1:
+            val_s7 = st.text_input("Variabile misurata (Real):", value="Temperatura", key="s7_ga_val")
+            all_s7 = st.text_input("Variabile di allarme (Bool):", value="Allarme", key="s7_ga_all")
+            tipo_s7 = st.radio("Tipo di allarme:", ["massima", "minima"], horizontal=True, key="s7_ga_tipo")
+        with col2:
+            sog_s7 = st.number_input("Soglia di intervento:", value=80.0, key="s7_ga_sog")
+            ist_s7 = st.number_input("Isteresi (≥ 0):", value=5.0, min_value=0.0, key="s7_ga_ist")
+            rit_s7 = st.number_input("Ritardo di intervento [ms] (0 = nessuno):", value=0, min_value=0, step=100,
+                                     key="s7_ga_rit")
+        try:
+            _mostra_codice_scl(siemens_s7.genera_scl_allarme(
+                val_s7, sog_s7, ist_s7, tipo_s7, ritardo_ms=rit_s7, allarme=all_s7))
+        except ValueError as e:
+            st.error(str(e))
+
+    elif tool_s7 == "Guida ai Concetti Base S7":
+        st.subheader("Concetti base S7 / TIA Portal")
+        arg_s7 = st.selectbox("Argomento:", siemens_s7.lista_argomenti_guida(), key="s7_guida_arg")
+        g_s7 = siemens_s7.guida(arg_s7)
+        st.markdown(f"**{g_s7['titolo']}**")
+        st.write(g_s7["testo"])
+        for punto in g_s7["punti"]:
+            st.markdown(f"- {punto}")
+
 elif categoria == "🤖  PLC e Automazione":
-    _card_open("plc", "🤖 PLC e Automazione", "IEC 61131-3")
+    _card_open("plc", "🤖 GE PACSystems RX3i", "IEC 61131-3")
     tool_plc = st.selectbox(
         "Seleziona Strumento:",
         [
