@@ -8,6 +8,7 @@ const CHIAVE_PROGETTI = "progettiSalvati";
 const CHIAVE_PREFERITI = "preferitiCalcolatori";
 const CHIAVE_ULTIMO_BACKUP = "ultimoBackupIl";
 const CHIAVE_ULTIMA_VERSIONE_VISTA = "ultimaVersioneVista";
+const CHIAVE_TEMA = "temaScelto";
 const MAX_CRONOLOGIA = 100;
 
 function _leggiJSON(chiave, fallback) {

@@ -16,6 +16,9 @@ documentate qui per completezza.
   esplicitamente ("Sei già alla versione più recente").
 - Controllo automatico di un aggiornamento anche quando la scheda torna visibile dopo essere
   stata in background, non solo al caricamento della pagina.
+- Tema chiaro per la PWA offline, oltre a quello scuro: di default segue l'impostazione del
+  sistema operativo, e il pulsante 🌙/☀️ nell'header permette di forzare l'uno o l'altro; la
+  scelta viene ricordata tra una sessione e l'altra.
 
 ## [v68] - 2026-07-09
 ### Added
