@@ -1728,6 +1728,32 @@ document.getElementById("btn-cronologia").addEventListener("click", renderCronol
 document.getElementById("btn-progetti").addEventListener("click", renderProgetti);
 document.getElementById("btn-versioni").addEventListener("click", renderCronologiaVersioni);
 
+// Tema chiaro/scuro: senza scelta esplicita segue il sistema operativo; il
+// pulsante alterna il tema effettivamente visibile e ricorda la scelta.
+function _temaEffettivo() {
+  const scelto = document.documentElement.getAttribute("data-tema");
+  if (scelto === "chiaro" || scelto === "scuro") return scelto;
+  return window.matchMedia("(prefers-color-scheme: light)").matches ? "chiaro" : "scuro";
+}
+
+function _applicaEtichettaTema() {
+  const tema = _temaEffettivo();
+  const btn = document.getElementById("btn-tema");
+  btn.textContent = tema === "chiaro" ? "🌙" : "☀️";
+  btn.title = tema === "chiaro" ? "Passa al tema scuro" : "Passa al tema chiaro";
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", tema === "chiaro" ? "#f6f8fa" : "#0e1117");
+}
+
+document.getElementById("btn-tema").addEventListener("click", () => {
+  const nuovo = _temaEffettivo() === "chiaro" ? "scuro" : "chiaro";
+  document.documentElement.setAttribute("data-tema", nuovo);
+  try { localStorage.setItem(CHIAVE_TEMA, nuovo); } catch (e) { /* storage non disponibile */ }
+  _applicaEtichettaTema();
+});
+window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", _applicaEtichettaTema);
+_applicaEtichettaTema();
+
 function aggiornaStatoConnessione() {
   const badge = document.getElementById("stato-connessione");
   if (navigator.onLine) {

@@ -7,6 +7,39 @@
   --accento: #4f8ef7;
   --ok: #3fb950;
   --errore: #f85149;
+  --badge-neutro: #3d4757;
+  color-scheme: dark;
+}
+
+/* Tema chiaro: applicato se l'utente lo ha scelto (data-tema="chiaro") oppure,
+   in assenza di scelta, se il sistema operativo preferisce il chiaro. Il blocco
+   e' duplicato perche' CSS non permette di condividere le regole tra una media
+   query e un selettore di attributo. */
+:root[data-tema="chiaro"] {
+  --bg: #f6f8fa;
+  --bg-pannello: #ffffff;
+  --bordo: #d0d7de;
+  --testo: #1f2328;
+  --testo-attenuato: #59636e;
+  --accento: #0969da;
+  --ok: #1a7f37;
+  --errore: #cf222e;
+  --badge-neutro: #e6eaef;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-tema="scuro"]) {
+    --bg: #f6f8fa;
+    --bg-pannello: #ffffff;
+    --bordo: #d0d7de;
+    --testo: #1f2328;
+    --testo-attenuato: #59636e;
+    --accento: #0969da;
+    --ok: #1a7f37;
+    --errore: #cf222e;
+    --badge-neutro: #e6eaef;
+    color-scheme: light;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -174,7 +207,7 @@ header h1 { font-size: 1.3rem; margin: 0; }
   border-radius: 999px;
   font-size: 0.8rem;
 }
-.badge-loading { background: #3d4757; color: var(--testo-attenuato); }
+.badge-loading { background: var(--badge-neutro); color: var(--testo-attenuato); }
 .badge-ok { background: rgba(63, 185, 80, 0.15); color: var(--ok); }
 .badge-errore { background: rgba(248, 81, 73, 0.15); color: var(--errore); }
 
