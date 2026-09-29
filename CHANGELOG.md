@@ -19,6 +19,13 @@ documentate qui per completezza.
 - Tema chiaro per la PWA offline, oltre a quello scuro: di default segue l'impostazione del
   sistema operativo, e il pulsante 🌙/☀️ nell'header permette di forzare l'uno o l'altro; la
   scelta viene ricordata tra una sessione e l'altra.
+### Fixed
+- PWA: chi aveva già cronologia o progetti salvati senza un backup recente incontrava un errore
+  JavaScript all'avvio (`GIORNI_SOGLIA_PROMEMORIA_BACKUP` usata prima di essere dichiarata), che
+  interrompeva il resto dello script: promemoria di backup, avviso di aggiornamento e registrazione
+  del service worker potevano non partire. Presente dalla v68 (e prima).
+- Vista "Cronologia versioni" e banner novità della PWA: i grassetti e i codici del CHANGELOG
+  comparivano con gli asterischi/apici letterali (`**testo**`), ora sono resi correttamente.
 
 ## [v68] - 2026-07-09
 ### Added

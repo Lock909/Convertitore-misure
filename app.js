@@ -1544,7 +1544,7 @@ function renderCronologiaVersioni() {
           const ul = document.createElement("ul");
           for (const b of sez.bullet) {
             const li = document.createElement("li");
-            li.textContent = b;
+            _scriviTestoInline(li, b);
             ul.appendChild(li);
           }
           card.appendChild(ul);
@@ -1766,6 +1766,11 @@ function aggiornaStatoConnessione() {
 }
 window.addEventListener("online", aggiornaStatoConnessione);
 window.addEventListener("offline", aggiornaStatoConnessione);
+// La costante deve precedere la chiamata: le const non sono "hoisted" come le
+// function, e usarla prima della dichiarazione lancia un ReferenceError che
+// interrompe il resto dello script (registrazione service worker compresa).
+const GIORNI_SOGLIA_PROMEMORIA_BACKUP = 30;
+
 aggiornaStatoConnessione();
 verificaPromemoriaBackup();
 
@@ -1785,8 +1790,6 @@ document.getElementById("btn-installa").addEventListener("click", async () => {
 window.addEventListener("appinstalled", () => {
   document.getElementById("btn-installa").hidden = true;
 });
-
-const GIORNI_SOGLIA_PROMEMORIA_BACKUP = 30;
 
 // Mostrato al massimo una volta per sessione: se l'utente lo chiude, non
 // ricompare finché non ricarica la pagina (ma torna a comparire alla
@@ -1833,6 +1836,27 @@ function mostraBannerAggiornamento() {
   banner.appendChild(testo);
   banner.appendChild(btn);
   document.body.prepend(banner);
+}
+
+// Rende nel <li> il markdown inline usato nel CHANGELOG (**grassetto**, `codice`)
+// creando nodi DOM invece di usare innerHTML: il testo arriva da un file
+// scaricato e non va mai interpretato come HTML.
+function _scriviTestoInline(elemento, testo) {
+  const parti = testo.split(/(\*\*[^*]+\*\*|`[^`]+`)/);
+  for (const parte of parti) {
+    if (!parte) continue;
+    let nodo;
+    if (parte.startsWith("**") && parte.endsWith("**") && parte.length > 4) {
+      nodo = document.createElement("strong");
+      nodo.textContent = parte.slice(2, -2);
+    } else if (parte.startsWith("`") && parte.endsWith("`") && parte.length > 2) {
+      nodo = document.createElement("code");
+      nodo.textContent = parte.slice(1, -1);
+    } else {
+      nodo = document.createTextNode(parte);
+    }
+    elemento.appendChild(nodo);
+  }
 }
 
 const NOMI_SEZIONE_CHANGELOG = { Added: "Aggiunte", Changed: "Modifiche", Fixed: "Correzioni", Removed: "Rimozioni" };
@@ -1978,7 +2002,7 @@ async function mostraBannerNovita() {
       const ul = document.createElement("ul");
       for (const b of sez.bullet) {
         const li = document.createElement("li");
-        li.textContent = b;
+        _scriviTestoInline(li, b);
         ul.appendChild(li);
       }
       corpo.appendChild(ul);
