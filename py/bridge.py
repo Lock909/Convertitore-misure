@@ -69,6 +69,7 @@ import atex
 import vaso_espansione
 import illuminazione_emergenza
 import gruppo_frigo
+import siemens_s7
 
 
 def _err(msg: str) -> dict:
@@ -2152,5 +2153,99 @@ def gruppo_frigo_eer_raffrescamento(Q_frigorifera_kW, P_elettrica_kW):
 def gruppo_frigo_eer_carnot_raffrescamento(T_calda_C, T_fredda_C):
     try:
         return _sanifica(gruppo_frigo.eer_carnot_raffrescamento(float(T_calda_C), float(T_fredda_C)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+# ------------------------------------------------------------------ Siemens S7 / TIA Portal
+def _testo_o_none(valore):
+    """I campi di testo opzionali del form arrivano come stringa (vuota se non compilati)."""
+    s = "" if valore is None else str(valore).strip()
+    return s or None
+
+
+def siemens_tipo_dato(tipo):
+    try:
+        return _sanifica(siemens_s7.info_tipo_dato(tipo))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def siemens_diagnosi_analogica(raw, tipo_segnale):
+    try:
+        r = siemens_s7.diagnosi_valore_grezzo(float(raw), tipo_segnale)
+        r.update({k: v for k, v in siemens_s7.range_segnale(tipo_segnale).items()
+                  if k in ("segnale_min", "segnale_max", "unita_segnale")})
+        return _sanifica(r)
+    except ValueError as e:
+        return _err(str(e))
+
+
+def siemens_scalatura_ingresso(raw, tipo_segnale, eng_min, eng_max, limita):
+    try:
+        return _sanifica(siemens_s7.scala_ingresso_analogico(
+            float(raw), tipo_segnale, float(eng_min), float(eng_max), bool(limita)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def siemens_scalatura_uscita(valore, tipo_segnale, eng_min, eng_max, limita):
+    try:
+        return _sanifica(siemens_s7.scala_uscita_analogica(
+            float(valore), tipo_segnale, float(eng_min), float(eng_max), bool(limita)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def siemens_indirizzo(area, tipo, byte, bit, quantita):
+    """Un solo operando (quantita = 1) oppure l'intervallo di un blocco contiguo."""
+    try:
+        if int(quantita) <= 1:
+            return _sanifica(siemens_s7.operando_assoluto(area, tipo, int(byte), int(bit)))
+        return _sanifica(siemens_s7.intervallo_memoria_s7(area, tipo, int(byte), int(quantita), int(bit)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def siemens_scl_scalatura(ingresso, uscita, tipo_segnale, eng_min, eng_max, metodo, tipo_ingresso, diagnostica):
+    try:
+        return _sanifica(siemens_s7.genera_scl_scalatura(
+            ingresso, uscita, tipo_segnale, float(eng_min), float(eng_max),
+            metodo=metodo, tipo_ingresso=tipo_ingresso, diagnostica=bool(diagnostica)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def siemens_scl_timer(tipo, istanza, ingresso, tempo_ms, reset, uscita_q, uscita_et):
+    try:
+        return _sanifica(siemens_s7.genera_scl_timer(
+            tipo, istanza, ingresso, int(float(tempo_ms)), reset=_testo_o_none(reset),
+            uscita_q=_testo_o_none(uscita_q), uscita_et=_testo_o_none(uscita_et)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def siemens_scl_contatore(tipo, istanza, preset, ingresso_su, ingresso_giu, reset, carica, uscita_q, uscita_valore):
+    try:
+        return _sanifica(siemens_s7.genera_scl_contatore(
+            tipo, istanza, int(float(preset)), ingresso_su=_testo_o_none(ingresso_su),
+            ingresso_giu=_testo_o_none(ingresso_giu), reset=_testo_o_none(reset),
+            carica=_testo_o_none(carica), uscita_q=_testo_o_none(uscita_q),
+            uscita_valore=_testo_o_none(uscita_valore)))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def siemens_scl_allarme(valore, soglia, isteresi, tipo, ritardo_ms, allarme):
+    try:
+        return _sanifica(siemens_s7.genera_scl_allarme(
+            valore, float(soglia), float(isteresi), tipo, int(float(ritardo_ms)), allarme))
+    except ValueError as e:
+        return _err(str(e))
+
+
+def siemens_guida(argomento):
+    try:
+        return _sanifica(siemens_s7.guida(argomento))
     except ValueError as e:
         return _err(str(e))

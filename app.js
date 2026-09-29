@@ -32,6 +32,7 @@ const FILE_PY = [
   "vaso_espansione.py",
   "illuminazione_emergenza.py",
   "gruppo_frigo.py",
+  "siemens_s7.py",
   "bridge.py",
 ];
 
@@ -98,6 +99,32 @@ function isGruppoEspanso(categoria, contieneAttivo) {
   return espanso;
 }
 
+function creaRigaCalcolatore(calc, preferiti) {
+  const riga = document.createElement("div");
+  riga.className = "nav-riga";
+
+  const btn = document.createElement("button");
+  btn.textContent = calc.titolo;
+  btn.className = "nav-btn" + (calc.id === calcolatoreAttuale ? " attivo" : "");
+  btn.dataset.id = calc.id;
+  btn.addEventListener("click", () => selezionaCalcolatore(calc.id));
+  riga.appendChild(btn);
+
+  const isPreferito = preferiti.includes(calc.id);
+  const btnStar = document.createElement("button");
+  btnStar.type = "button";
+  btnStar.className = "nav-star" + (isPreferito ? " attivo" : "");
+  btnStar.textContent = isPreferito ? "★" : "☆";
+  btnStar.title = isPreferito ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti";
+  btnStar.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    toggleFavorito(calc.id);
+    costruisciMenu();
+  });
+  riga.appendChild(btnStar);
+  return riga;
+}
+
 function costruisciMenu() {
   const nav = document.getElementById("nav-calcolatori");
   nav.innerHTML = "";
@@ -159,31 +186,53 @@ function costruisciMenu() {
     const listaEl = document.createElement("div");
     listaEl.className = "nav-lista-gruppo";
     listaEl.hidden = !espanso;
+
+    // Le categorie con sottocategorie (es. "Automazione": un sistema per volta)
+    // mostrano prima le voci senza sottocategoria, poi un sottogruppo
+    // richiudibile per ciascuna. I "Preferiti" restano un elenco piatto.
+    const sottogruppi = new Map();
     for (const calc of lista) {
-      const riga = document.createElement("div");
-      riga.className = "nav-riga";
+      if (calc.sottocategoria && categoria !== "⭐ Preferiti") {
+        if (!sottogruppi.has(calc.sottocategoria)) sottogruppi.set(calc.sottocategoria, []);
+        sottogruppi.get(calc.sottocategoria).push(calc);
+      } else {
+        listaEl.appendChild(creaRigaCalcolatore(calc, preferiti));
+      }
+    }
+    for (const [nomeSotto, elenco] of sottogruppi) {
+      const chiave = `${categoria} / ${nomeSotto}`;
+      const sottoAttivo = elenco.some(c => c.id === calcolatoreAttuale);
+      const sottoEspanso = inRicerca ? true : isGruppoEspanso(chiave, sottoAttivo);
 
-      const btn = document.createElement("button");
-      btn.textContent = calc.titolo;
-      btn.className = "nav-btn" + (calc.id === calcolatoreAttuale ? " attivo" : "");
-      btn.dataset.id = calc.id;
-      btn.addEventListener("click", () => selezionaCalcolatore(calc.id));
-      riga.appendChild(btn);
-
-      const isPreferito = preferiti.includes(calc.id);
-      const btnStar = document.createElement("button");
-      btnStar.type = "button";
-      btnStar.className = "nav-star" + (isPreferito ? " attivo" : "");
-      btnStar.textContent = isPreferito ? "★" : "☆";
-      btnStar.title = isPreferito ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti";
-      btnStar.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        toggleFavorito(calc.id);
+      const sotto = document.createElement("div");
+      sotto.className = "nav-sottogruppo";
+      const sottoTitolo = document.createElement("button");
+      sottoTitolo.type = "button";
+      sottoTitolo.className = "nav-titolo-sottogruppo";
+      const sottoFreccia = document.createElement("span");
+      sottoFreccia.className = "nav-titolo-freccia";
+      sottoFreccia.textContent = sottoEspanso ? "▾" : "▸";
+      const sottoTesto = document.createElement("span");
+      sottoTesto.className = "nav-titolo-testo";
+      sottoTesto.textContent = nomeSotto;
+      const sottoConteggio = document.createElement("span");
+      sottoConteggio.className = "nav-titolo-conteggio";
+      sottoConteggio.textContent = elenco.length;
+      sottoTitolo.appendChild(sottoFreccia);
+      sottoTitolo.appendChild(sottoTesto);
+      sottoTitolo.appendChild(sottoConteggio);
+      sottoTitolo.addEventListener("click", () => {
+        statoGruppi.set(chiave, !sottoEspanso);
         costruisciMenu();
       });
-      riga.appendChild(btnStar);
+      sotto.appendChild(sottoTitolo);
 
-      listaEl.appendChild(riga);
+      const sottoLista = document.createElement("div");
+      sottoLista.className = "nav-lista-sottogruppo";
+      sottoLista.hidden = !sottoEspanso;
+      for (const calc of elenco) sottoLista.appendChild(creaRigaCalcolatore(calc, preferiti));
+      sotto.appendChild(sottoLista);
+      listaEl.appendChild(sotto);
     }
     gruppo.appendChild(listaEl);
     nav.appendChild(gruppo);
@@ -404,9 +453,15 @@ function renderForm(calc) {
     return;
   }
 
+  if (calc.senzaConfronto) {
+    // Generatori di codice e guide: confrontare due scenari non ha senso.
+    modalitaConfrontoAttiva = false;
+  }
+
   const btnConfronto = document.createElement("button");
   btnConfronto.type = "button";
   btnConfronto.className = "azione-btn btn-toggle-confronto";
+  btnConfronto.hidden = !!calc.senzaConfronto;
   btnConfronto.textContent = modalitaConfrontoAttiva ? "↩️ Torna a calcolo singolo" : "🔀 Confronta due scenari";
   btnConfronto.addEventListener("click", () => {
     modalitaConfrontoAttiva = !modalitaConfrontoAttiva;
@@ -1076,6 +1131,8 @@ function eseguiCalcolo(calc, form) {
     divRisultati.appendChild(renderBatteria(risultato));
   } else if (calc.risultati === "derating") {
     divRisultati.appendChild(renderDerating(risultato));
+  } else if (calc.risultati === "testo_codice") {
+    divRisultati.appendChild(renderTestoCodice(risultato));
   } else if (calc.risultati === "motore_targa") {
     divRisultati.appendChild(renderMotoreTarga(risultato, kwargs.lambda_max));
   } else {
@@ -1280,6 +1337,66 @@ function renderGrigliaRisultati(coppie) {
     griglia.appendChild(scheda);
   }
   return griglia;
+}
+
+// Risultati testuali (generatori di codice SCL, guide): blocchi <pre> con
+// pulsante "Copia" per le sezioni di codice, paragrafo e elenco per le
+// spiegazioni. Tutto inserito con textContent: mai come HTML.
+function _blocchiCodice(titolo, testo) {
+  const sezione = document.createElement("div");
+  sezione.className = "blocco-codice";
+  const intestazione = document.createElement("div");
+  intestazione.className = "blocco-codice-intestazione";
+  const etichetta = document.createElement("strong");
+  etichetta.textContent = titolo;
+  const btnCopia = document.createElement("button");
+  btnCopia.type = "button";
+  btnCopia.className = "azione-btn";
+  btnCopia.textContent = "📋 Copia";
+  btnCopia.addEventListener("click", () => {
+    navigator.clipboard.writeText(testo)
+      .then(() => mostraToast("Copiato negli appunti."))
+      .catch(() => alert("Copia non riuscita. Testo:\n\n" + testo));
+  });
+  intestazione.appendChild(etichetta);
+  intestazione.appendChild(btnCopia);
+  const pre = document.createElement("pre");
+  pre.className = "codice-scl";
+  pre.textContent = testo;
+  sezione.appendChild(intestazione);
+  sezione.appendChild(pre);
+  return sezione;
+}
+
+function renderTestoCodice(risultato) {
+  const contenitore = document.createElement("div");
+  contenitore.className = "risultato-testo";
+  if (risultato.codice) contenitore.appendChild(_blocchiCodice("Codice SCL", risultato.codice));
+  if (risultato.dichiarazioni) {
+    contenitore.appendChild(_blocchiCodice("Dichiarazioni (interfaccia del blocco)", risultato.dichiarazioni));
+  }
+  if (risultato.testo) {
+    const p = document.createElement("p");
+    p.textContent = risultato.testo;
+    contenitore.appendChild(p);
+  }
+  for (const [chiave, intestazione] of [["punti", null], ["note", "Note"]]) {
+    const voci = risultato[chiave];
+    if (!Array.isArray(voci) || voci.length === 0) continue;
+    if (intestazione) {
+      const h = document.createElement("strong");
+      h.textContent = intestazione;
+      contenitore.appendChild(h);
+    }
+    const ul = document.createElement("ul");
+    for (const voce of voci) {
+      const li = document.createElement("li");
+      li.textContent = voce;
+      ul.appendChild(li);
+    }
+    contenitore.appendChild(ul);
+  }
+  return contenitore;
 }
 
 function renderTabellaCampi(risultato, definizioni) {
