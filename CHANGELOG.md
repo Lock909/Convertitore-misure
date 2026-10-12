@@ -8,7 +8,7 @@ Le versioni precedenti alla v28 sono state sviluppate prima dell'adozione di Git
 progetto: non hanno un tag corrispondente (nessun commit storico disponibile), ma sono
 documentate qui per completezza.
 
-## [v69] - 2026-07-10
+## [v69] - 2026-10-12
 ### Added
 - Pulsante "🔄 Aggiorna" nell'header della PWA offline: forza subito il controllo di una nuova
   versione invece di aspettare i tempi del browser (fino a 24h), utile per chi tiene l'app
